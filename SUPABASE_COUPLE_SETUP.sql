@@ -4,6 +4,15 @@
 
 create extension if not exists pgcrypto;
 
+create table if not exists public.couple_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  display_name text not null default 'You',
+  avatar_data text not null default '',
+  email text,
+  updated_at timestamptz not null default now()
+);
+
+
 create table if not exists public.couples (
   id uuid primary key default gen_random_uuid(),
   pair_code text unique not null,
@@ -29,6 +38,7 @@ create table if not exists public.couple_presence (
 alter table public.couples enable row level security;
 alter table public.couple_locations enable row level security;
 alter table public.couple_presence enable row level security;
+alter table public.couple_profiles enable row level security;
 
 -- Users do not get direct SELECT access to partner data.
 -- Pairing and partner reads happen through the security-definer RPCs below.
@@ -40,6 +50,13 @@ drop policy if exists "own location write" on public.couple_locations;
 drop policy if exists "own location select" on public.couple_locations;
 drop policy if exists "own presence write" on public.couple_presence;
 drop policy if exists "own presence select" on public.couple_presence;
+drop policy if exists "own profile all" on public.couple_profiles;
+
+create policy "own profile all"
+on public.couple_profiles
+for all
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
 
 create policy "own location write"
 on public.couple_locations
@@ -167,6 +184,7 @@ create or replace function public.partner_snapshot()
 returns table(
   user_id uuid,
   display_name text,
+  avatar_data text,
   is_online boolean,
   last_seen timestamptz,
   latitude double precision,
@@ -192,7 +210,8 @@ as $$
   )
   select
     p.partner_id,
-    'Partner'::text,
+    coalesce(pro.display_name, 'Partner')::text,
+    coalesce(pro.avatar_data, '')::text,
     coalesce(
       cp.is_online
       and cp.last_seen >= now() - interval '45 seconds',
@@ -206,14 +225,44 @@ as $$
   from p
   left join public.couple_presence cp
     on cp.user_id = p.partner_id
+  left join public.couple_profiles pro
+    on pro.user_id = p.partner_id
   left join public.couple_locations cl
     on cl.user_id = p.partner_id;
+$$;
+
+create or replace function public.leave_pair()
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_deleted boolean := false;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  delete from public.couples
+  where user_a = auth.uid() or user_b = auth.uid();
+
+  v_deleted := found;
+
+  delete from public.couple_locations where user_id = auth.uid();
+  update public.couple_presence
+  set is_online = false, last_seen = now()
+  where user_id = auth.uid();
+
+  return v_deleted;
+end;
 $$;
 
 grant execute on function public.create_pair(text) to authenticated, anon;
 grant execute on function public.join_pair(text) to authenticated, anon;
 grant execute on function public.my_pair() to authenticated, anon;
 grant execute on function public.partner_snapshot() to authenticated, anon;
+grant execute on function public.leave_pair() to authenticated, anon;
 
 -- Catatan:
 -- 1. Anonymous Sign-Ins harus ON.

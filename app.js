@@ -13,6 +13,7 @@ let partnerTimer = null;
 let presenceTimer = null;
 let presenceChannel = null;
 let pageStartedAt = Date.now();
+let myProfile = null;
 
 const $ = id => document.getElementById(id);
 
@@ -31,6 +32,7 @@ function pageName() {
   if (clean === 'location') return 'location';
   if (clean === 'couple') return 'couple';
   if (clean === 'settings') return 'settings';
+  if (clean === 'auth') return 'auth';
   return 'home';
 }
 
@@ -108,7 +110,7 @@ function setConfig() {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: false
+      detectSessionInUrl: true
     }
   });
 }
@@ -137,6 +139,190 @@ async function ensureAuth() {
     toast('Koneksi Supabase gagal.');
     return false;
   }
+}
+
+async function loadProfile() {
+  if (!sb || !myUser) return;
+
+  const { data, error } = await sb
+    .from('couple_profiles')
+    .select('display_name,avatar_data,email')
+    .eq('user_id', myUser.id)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('Profile load failed:', error.message);
+    return;
+  }
+
+  myProfile = data || { display_name: '', avatar_data: '', email: myUser.email || '' };
+  const name = myProfile.display_name || myUser.user_metadata?.display_name || 'You';
+  const avatar = myProfile.avatar_data || '';
+  setText('meName', name);
+  setText('settingsProfileName', name);
+  setText('settingsProfileEmail', myUser.email || 'Akun tamu');
+  setText('settingsAccountType', myUser.is_anonymous ? 'Guest' : 'Email account');
+  setText('settingsAuthLabel', myUser.is_anonymous ? 'Akun tamu' : 'Email account');
+
+  const initials = name.trim().slice(0, 1).toUpperCase() || 'J';
+  document.querySelectorAll('[data-profile-avatar]').forEach(el => {
+    el.textContent = avatar ? '' : initials;
+    el.style.backgroundImage = avatar ? `url("${avatar}")` : '';
+    el.classList.toggle('has-image', !!avatar);
+  });
+
+  const authLink = $('authLink');
+  const logout = $('logoutAccount');
+  const guestHint = $('guestAccountHint');
+  if (authLink) authLink.style.display = myUser.is_anonymous ? 'inline-flex' : 'none';
+  if (logout) logout.style.display = myUser.is_anonymous ? 'none' : 'inline-flex';
+  if (guestHint) guestHint.textContent = myUser.is_anonymous
+    ? 'Akun tamu tersimpan di perangkat ini. Login membuat akun yang bisa dipakai kembali.'
+    : `Login sebagai ${myUser.email || 'akun email'}.`;
+}
+
+async function saveProfile() {
+  if (!sb || !myUser) return;
+  const name = ($('profileName')?.value || '').trim().slice(0, 40);
+  const avatarInput = $('profilePhoto');
+  let avatarData = myProfile?.avatar_data || '';
+
+  if (avatarInput?.files?.[0]) {
+    try { avatarData = await resizeAvatar(avatarInput.files[0]); }
+    catch (_) { toast('Foto tidak dapat diproses.'); return; }
+  }
+
+  const { error } = await sb.from('couple_profiles').upsert({
+    user_id: myUser.id,
+    display_name: name || 'You',
+    avatar_data: avatarData,
+    email: myUser.email || null,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'user_id' });
+
+  if (error) { toast(error.message || 'Profil gagal disimpan.'); return; }
+  await loadProfile();
+  if (avatarInput) avatarInput.value = '';
+  toast('Profil diperbarui.');
+}
+
+function resizeAvatar(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Invalid image'));
+      img.onload = () => {
+        const size = 512;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const scale = Math.max(size / img.width, size / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function logoutAccount() {
+  if (!sb) return;
+  await markOffline();
+  const { error } = await sb.auth.signOut();
+  if (error) { toast(error.message || 'Logout gagal.'); return; }
+  location.href = './auth.html';
+}
+
+async function leavePair() {
+  if (!sb || !myUser) return;
+  if (!isPaired()) { toast('Belum ada pasangan yang terhubung.'); return; }
+  if (!window.confirm('Putuskan pasangan? Koneksi lokasi dan data pasangan akan dihentikan.')) return;
+
+  const { error } = await sb.rpc('leave_pair');
+  if (error) { toast(error.message || 'Pasangan gagal diputuskan.'); return; }
+
+  stopLocationSharing(false);
+  myPair = null;
+  await loadPair();
+  await loadPartner();
+  toast('Pasangan berhasil diputuskan.');
+}
+
+function setupProfileUI() {
+  if ($('profileName')) $('profileName').value = myProfile?.display_name || '';
+  if ($('saveProfile')) $('saveProfile').onclick = saveProfile;
+  if ($('logoutAccount')) $('logoutAccount').onclick = logoutAccount;
+  if ($('leavePair')) $('leavePair').onclick = leavePair;
+}
+
+function setupAuthPage() {
+  if (!sb) return;
+  const loginForm = $('loginForm');
+  const registerForm = $('registerForm');
+  const showLogin = $('showLogin');
+  const showRegister = $('showRegister');
+  const message = $('authMessage');
+
+  const setMode = mode => {
+    loginForm?.classList.toggle('hidden', mode !== 'login');
+    registerForm?.classList.toggle('hidden', mode !== 'register');
+    showLogin?.classList.toggle('active', mode === 'login');
+    showRegister?.classList.toggle('active', mode === 'register');
+    if (message) message.textContent = '';
+  };
+
+  showLogin?.addEventListener('click', () => setMode('login'));
+  showRegister?.addEventListener('click', () => setMode('register'));
+
+  loginForm?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const email = $('loginEmail')?.value.trim();
+    const password = $('loginPassword')?.value || '';
+    if (!email || !password) return;
+
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      if (message) message.textContent = error.message;
+      return;
+    }
+    location.href = './index.html';
+  });
+
+  registerForm?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = $('registerName')?.value.trim();
+    const email = $('registerEmail')?.value.trim();
+    const password = $('registerPassword')?.value || '';
+    if (!name || !email || !password) return;
+    if (password.length < 6) {
+      if (message) message.textContent = 'Password minimal 6 karakter.';
+      return;
+    }
+
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { display_name: name },
+        emailRedirectTo: `${location.origin}/index.html`
+      }
+    });
+
+    if (error) {
+      if (message) message.textContent = error.message;
+      return;
+    }
+
+    if (data?.session) {
+      location.href = './index.html';
+    } else if (message) {
+      message.textContent = 'Akun dibuat. Cek email untuk verifikasi sebelum login.';
+    }
+  });
 }
 
 function updateSpeed(pos) {
@@ -436,11 +622,17 @@ function fitMapToMarkers() {
 
 async function loadPartner() {
   if (!sb || !myPair?.user_a || !myPair?.user_b) {
+    setText('partnerName', 'Partner');
     setText('partnerStatus', 'Belum terhubung');
     setText('locationPartnerStatus', 'Belum terhubung');
     setText('partnerLast', '—');
     setText('locationPartnerLast', 'Last active —');
     setOnline('partnerDot', false);
+    document.querySelectorAll('[data-partner-avatar]').forEach(el => {
+      el.textContent = '?';
+      el.style.backgroundImage = '';
+      el.classList.remove('has-image');
+    });
     return;
   }
 
@@ -454,11 +646,18 @@ async function loadPartner() {
   const p = data[0];
   const status = p.is_online ? 'Online' : 'Offline';
 
+  const partnerName = p.display_name || 'Partner';
+  setText('partnerName', partnerName);
   setText('partnerStatus', status);
   setOnline('partnerDot', p.is_online);
   setText('partnerLast', p.last_seen ? timeAgo(p.last_seen) : '—');
   setText('locationPartnerStatus', status);
   setText('locationPartnerLast', p.last_seen ? `Last active ${timeAgo(p.last_seen)}` : 'Last active —');
+  document.querySelectorAll('[data-partner-avatar]').forEach(el => {
+    el.textContent = p.avatar_data ? '' : (partnerName.trim().slice(0, 1).toUpperCase() || '?');
+    el.style.backgroundImage = p.avatar_data ? `url("${p.avatar_data}")` : '';
+    el.classList.toggle('has-image', !!p.avatar_data);
+  });
 
   if (p.latitude != null && p.longitude != null) {
     setText('partnerLocation', `${p.latitude.toFixed(4)}, ${p.longitude.toFixed(4)}`);
@@ -594,6 +793,21 @@ async function start() {
   const page = pageName();
 
   setConfig();
+
+  if (!sb) {
+    toast('Config Supabase belum tersedia.');
+    return;
+  }
+
+  if (page === 'auth') {
+    setupAuthPage();
+    const { data } = await sb.auth.getSession();
+    if (data?.session?.user && !data.session.user.is_anonymous) {
+      location.href = './index.html';
+    }
+    return;
+  }
+
   setupNav();
   setupButtons();
   setupLifecycle();
@@ -603,13 +817,10 @@ async function start() {
     ensureLeaflet();
   }
 
-  if (!sb) {
-    toast('Config Supabase belum tersedia.');
-    return;
-  }
-
   if (!(await ensureAuth())) return;
 
+  await loadProfile();
+  setupProfileUI();
   await loadPair();
   await loadPartner();
   startTimers();

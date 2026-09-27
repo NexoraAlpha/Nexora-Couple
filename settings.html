@@ -21,6 +21,26 @@
     <section class="settings-list">
       <article class="glass setting-card"><div><span class="label">LOCATION</span><h3>Location sharing</h3><p>Bagikan lokasi perangkat ke pasangan setelah izin lokasi diberikan.</p></div><button class="switch" id="locationToggle"></button></article>
       <article class="glass setting-card"><div><span class="label">ACCOUNT</span><h3>Connection</h3><p>Status pairing saat ini.</p></div><b id="settingsPairStatus">Not paired</b></article>
+
+      <article class="glass profile-card">
+        <div class="profile-head">
+          <div class="profile-avatar avatar" data-profile-avatar>J</div>
+          <div><span class="label">PROFILE</span><h3 id="settingsProfileName">You</h3><p id="settingsProfileEmail">Akun tamu</p></div>
+        </div>
+        <div class="profile-fields">
+          <label>Nama<input id="profileName" type="text" maxlength="40" placeholder="Nama kamu"></label>
+          <label>Foto profil<input id="profilePhoto" type="file" accept="image/*"></label>
+        </div>
+        <div class="profile-actions">
+          <button class="btn primary" id="saveProfile" type="button">Simpan profil</button>
+          <a class="btn" id="authLink" href="./auth.html">Login / Buat akun</a>
+          <button class="btn" id="logoutAccount" type="button">Logout</button>
+        </div>
+        <p class="account-hint" id="guestAccountHint">Akun tamu tersimpan di perangkat ini.</p>
+      </article>
+
+      <article class="glass setting-card danger-card"><div><span class="label">COUPLE</span><h3>Putuskan pasangan</h3><p>Hentikan hubungan pairing dari akun ini. Lokasi tidak lagi dibagikan ke pasangan.</p></div><button class="btn danger" id="leavePair" type="button">Putuskan</button></article>
+
       <article class="glass privacy setting-privacy"><span class="label">PRIVACY FIRST</span><h3>Data pasangan tetap di bawah kontrol masing-masing.</h3><p>Lokasi hanya dibagikan setelah permission diberikan. Jangan gunakan fitur tracking secara diam-diam atau untuk mengawasi pasangan tanpa persetujuan.</p></article>
     </section>
   </main>
