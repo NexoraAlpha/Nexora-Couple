@@ -247,8 +247,8 @@ async function logoutAccount() {
 async function requestLeavePair() {
   if (!sb || !myUser) return;
 
-  // Let Supabase determine the actual pairing state. The cached myPair
-  // object can be stale between page load and a button press.
+  // The database is the source of truth for the current couple.
+  // Do not reject the request using cached myPair/isPaired() state.
   const { data, error } = await sb.rpc('request_leave_pair');
   if (error) { toast(error.message || 'Permintaan belum dapat dikirim.'); return; }
 
@@ -1044,6 +1044,10 @@ function setupButtons() {
   if ($('createPair')) $('createPair').onclick = createCode;
   if ($('joinPair')) $('joinPair').onclick = joinCode;
 
+  // Disconnect controls only.
+  if ($('leavePair')) $('leavePair').onclick = requestLeavePair;
+  if ($('cancelLeavePair')) $('cancelLeavePair').onclick = cancelLeaveRequest;
+
   if ($('pairCode')) {
     $('pairCode').addEventListener('input', e => {
       e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
@@ -1052,16 +1056,6 @@ function setupButtons() {
     $('pairCode').addEventListener('keydown', e => {
       if (e.key === 'Enter') joinCode();
     });
-  }
-
-  // Disconnect controls: only wire the existing buttons to the existing
-  // Supabase RPC functions. No pairing/display logic is changed here.
-  if ($('leavePair')) {
-    $('leavePair').onclick = requestLeavePair;
-  }
-
-  if ($('cancelLeavePair')) {
-    $('cancelLeavePair').onclick = cancelLeaveRequest;
   }
 
   if ($('refreshBtn')) {
