@@ -100,16 +100,43 @@ function startTimers(){
   partnerTimer=setInterval(()=>loadPartner().catch(()=>{}),5000);
 }
 function setupNav(){
-  const nav=[...document.querySelectorAll('.bottom-nav button')];
-  const targets=['dashboard','map','pairCard','privacy'];
-  nav.forEach((b,i)=>b.addEventListener('click',()=>{nav.forEach(x=>x.classList.remove('active'));b.classList.add('active');const el=$(targets[i]); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); if(i===1 && map) setTimeout(()=>map.invalidateSize(),350);}));
+  const path=(location.pathname.split('/').pop()||'index.html').toLowerCase();
+  const page=path==='location.html'?'location':path==='couple.html'?'couple':path==='settings.html'?'settings':'home';
+  document.querySelectorAll('.bottom-nav .nav-link').forEach(a=>{
+    a.classList.toggle('active',a.dataset.page===page);
+  });
 }
 async function start(){
-  initMap(); setConfig(); setupNav();
-  $('locationToggle').onclick=toggleLocation; $('createPair').onclick=createCode; $('joinPair').onclick=joinCode;
-  $('refreshBtn').onclick=async()=>{await loadPair();await loadPartner();map.invalidateSize();toast('Dashboard diperbarui.');};
-  $('centerMap').onclick=()=>{if(meMarker)map.setView(meMarker.getLatLng(),15);else toast('Aktifkan lokasi dulu.');};
-  if(!sb){toast('Mode preview aktif — config Supabase belum terisi.');return;}
-  if(await ensureAuth()){await loadPair();startTimers();}
+  const path=(location.pathname.split('/').pop()||'index.html').toLowerCase();
+  const page=path==='location.html'?'location':path==='couple.html'?'couple':path==='settings.html'?'settings':'home';
+  setConfig(); setupNav();
+
+  if(page==='location' && $('map')) initMap();
+
+  if($('locationToggle')) $('locationToggle').onclick=toggleLocation;
+  if($('createPair')) $('createPair').onclick=createCode;
+  if($('joinPair')) $('joinPair').onclick=joinCode;
+  if($('refreshBtn')) $('refreshBtn').onclick=async()=>{
+    await loadPair(); await loadPartner();
+    if(map) map.invalidateSize();
+    toast('Data diperbarui.');
+  };
+  if($('centerMap')) $('centerMap').onclick=()=>{
+    if(meMarker && map) map.setView(meMarker.getLatLng(),15);
+    else toast('Aktifkan lokasi dulu.');
+  };
+
+  if(!sb){
+    toast('Mode preview aktif — config Supabase belum terisi.');
+    return;
+  }
+
+  if(await ensureAuth()){
+    await loadPair();
+    if(page==='location' || page==='home' || page==='couple') startTimers();
+    if(page==='location') await loadPartner();
+    if(page==='home') await loadPartner();
+    if(page==='settings' && $('settingsPairStatus')) $('settingsPairStatus').textContent=$('pairStatus')?.textContent||'Not paired';
+  }
 }
 start();

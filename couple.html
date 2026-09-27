@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#030611">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="icon" href="./favicon-32.png">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <title>Nexora Couple</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="bg-grid"></div><div class="orb orb-a"></div><div class="orb orb-b"></div>
+  <header class="topbar glass">
+    <a class="brand" href="./index.html" aria-label="Nexora Couple"><img src="./nexora-icon.svg" alt="Nexora"><div><b>NEXORA</b><span>COUPLE</span></div></a>
+    <div class="pair-pill" id="pairStatus">Not paired</div>
+  </header>
+  <main class="page-shell couple-page">
+    <section class="page-title"><div><span class="label">COUPLE LINK</span><h1>Hubungkan pasangan</h1><p>Buat kode pairing atau masukkan kode pasangan. Sharing hanya aktif setelah kedua akun terhubung.</p></div></section>
+    <section class="pair-card glass" id="pairCard">
+      <div class="pair-copy"><span class="label">PRIVATE CONNECTION</span><h2>Pair your accounts</h2><p>Kode hanya digunakan untuk menghubungkan dua akun yang saling memberikan persetujuan.</p></div>
+      <div class="pair-actions"><button class="btn primary" id="createPair">Buat kode</button><div class="join"><input id="pairCode" maxlength="8" placeholder="KODE" inputmode="text" autocomplete="off"><button class="btn" id="joinPair">Hubungkan</button></div><div class="pair-code" id="generatedCode"></div></div>
+    </section>
+    <section class="glass couple-status">
+      <span class="label">CONNECTION STATUS</span>
+      <div class="connection-row"><div class="avatar" id="meAvatar">J</div><div><strong id="meName">You</strong><small id="meStatus">Offline</small></div><span class="dot" id="meDot"></span></div>
+      <div class="connection-row"><div class="avatar partner" id="partnerAvatar">?</div><div><strong id="partnerName">Partner</strong><small id="partnerStatus">Belum terhubung</small></div><span class="dot" id="partnerDot"></span></div>
+    </section>
+  </main>
+  <nav class="bottom-nav glass" aria-label="Main navigation">
+    <a class="nav-link" data-page="home" href="./index.html">⌂<span>Home</span></a>
+    <a class="nav-link" data-page="location" href="./location.html">⌖<span>Location</span></a>
+    <a class="nav-link" data-page="couple" href="./couple.html">♡<span>Couple</span></a>
+    <a class="nav-link" data-page="settings" href="./settings.html">⚙<span>Settings</span></a>
+  </nav>
+  <div class="toast" id="toast"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+</body></html>
