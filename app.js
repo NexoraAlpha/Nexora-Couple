@@ -158,6 +158,9 @@ async function loadProfile() {
   setText('meName', name);
   setText('settingsProfileName', name);
   setText('settingsProfileEmail', myUser.email || 'Akun tamu');
+  setText('profileTriggerName', name);
+  setText('profileMenuName', name);
+  setText('profileMenuEmail', myUser.email || 'Akun tamu');
   setText('settingsAccountType', myUser.is_anonymous ? 'Guest' : 'Email account');
   setText('settingsAuthLabel', myUser.is_anonymous ? 'Akun tamu' : 'Email account');
 
@@ -269,13 +272,23 @@ async function respondLeaveRequest(approve) {
 }
 
 function setupProfileUI() {
+  const trigger = $('profileTrigger');
+  const menu = $('profileMenu');
+  if (trigger && menu) {
+    trigger.onclick = (e) => {
+      e.stopPropagation();
+      menu.classList.toggle('open');
+    };
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && !trigger.contains(e.target)) menu.classList.remove('open');
+    }, { passive: true });
+  }
   if ($('profileName')) $('profileName').value = myProfile?.display_name || '';
-  if ($('saveProfile')) $('saveProfile').onclick = saveProfile;
+  if ($('saveProfile')) $('saveProfile').onclick = async () => {
+    await saveProfile();
+    menu?.classList.remove('open');
+  };
   if ($('logoutAccount')) $('logoutAccount').onclick = logoutAccount;
-  if ($('leavePair')) $('leavePair').onclick = requestLeavePair;
-  if ($('cancelLeavePair')) $('cancelLeavePair').onclick = cancelLeaveRequest;
-  if ($('approveLeavePair')) $('approveLeavePair').onclick = () => respondLeaveRequest(true);
-  if ($('rejectLeavePair')) $('rejectLeavePair').onclick = () => respondLeaveRequest(false);
 }
 
 function setupAuthPage() {

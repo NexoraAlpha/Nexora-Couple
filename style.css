@@ -202,3 +202,30 @@ body:before{
   .auth-card{padding:22px}
 }
 \n\n/* NOVERA notifications + consent UI */\n.top-actions{display:flex;align-items:center;gap:8px}.notification-wrap{position:relative}.notification-button{position:relative;width:38px;height:38px;border-radius:13px;border:1px solid var(--line);background:rgba(255,255,255,.045);color:#fff0f7;cursor:pointer;font-size:18px}.notification-badge{position:absolute;right:-4px;top:-5px;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:#ff4f9a;color:#fff;font-size:9px;font-weight:900;display:grid;place-items:center;border:2px solid #09030a}.notification-badge[hidden]{display:none}.notification-panel{position:absolute;right:0;top:46px;width:min(360px,calc(100vw - 28px));max-height:430px;overflow:auto;border-radius:20px;padding:10px;display:none;z-index:60}.notification-panel.open{display:block}.notification-head{display:flex;align-items:center;justify-content:space-between;padding:8px 9px 10px;border-bottom:1px solid var(--line)}.notification-head button{border:0;background:transparent;color:#ff9dcc;font-size:10px;font-weight:800;cursor:pointer}.notification-item{display:flex;justify-content:space-between;gap:10px;padding:12px 9px;border-bottom:1px solid rgba(255,255,255,.06)}.notification-item.unread{background:rgba(255,101,174,.055);border-radius:14px}.notification-item strong{font-size:12px}.notification-item p{margin:4px 0;color:var(--muted);font-size:11px;line-height:1.45}.notification-item small{color:#778196;font-size:9px}.notification-actions{display:flex;gap:5px;align-items:flex-end}.notification-actions .btn{white-space:nowrap;padding:8px 9px;font-size:10px}.notification-empty{padding:22px 10px;text-align:center;color:var(--muted);font-size:11px}.disconnect-status{color:#ff9dcc!important;font-size:11px!important;margin-top:7px!important}.disconnect-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.disconnect-actions [hidden]{display:none!important}@media(max-width:760px){.top-actions{gap:5px}.notification-panel{position:fixed;right:12px;top:68px}.notification-item{display:block}.notification-actions{margin-top:8px}.disconnect-actions{justify-content:flex-start}}\n
+/* NOVERA PROFILE HEADER — profile separated from Settings */
+.profile-wrap{position:relative}
+.profile-trigger{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.045);color:var(--text);padding:4px 8px 4px 5px;cursor:pointer;min-height:38px}
+.profile-trigger-avatar{width:30px!important;height:30px!important;min-width:30px!important;aspect-ratio:1/1!important;border-radius:50%!important;background-position:center!important;background-size:cover!important;background-repeat:no-repeat!important;overflow:hidden!important;display:grid!important;place-items:center!important}
+.profile-trigger-name{font-size:11px;font-weight:800;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.profile-chevron{font-size:13px;color:#ff9dcc;line-height:1;transform:translateY(-1px)}
+.profile-menu{position:absolute;right:0;top:46px;width:min(330px,calc(100vw - 24px));padding:13px;border-radius:20px;display:none;z-index:80}
+.profile-menu.open{display:block}
+.profile-menu-head{display:flex;align-items:center;gap:11px;padding:4px 3px 12px;border-bottom:1px solid var(--line)}
+.profile-menu-avatar{width:48px!important;height:48px!important;min-width:48px!important;aspect-ratio:1/1!important;border-radius:50%!important;background-position:center!important;background-size:cover!important;background-repeat:no-repeat!important;overflow:hidden!important;display:grid!important;place-items:center!important}
+.profile-menu-head strong{display:block;font-size:13px}.profile-menu-head small{display:block;color:var(--muted);font-size:10px;margin-top:3px;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile-fields.compact{grid-template-columns:1fr;margin-top:12px;gap:8px}
+.profile-fields.compact input{padding:10px 11px}
+.profile-menu .profile-actions{margin-top:10px}
+.profile-menu .profile-actions .btn{flex:1}
+
+/* Every avatar is always a true 1:1 crop. */
+.avatar,.profile-avatar,.profile-menu-avatar,.profile-trigger-avatar{aspect-ratio:1/1!important;overflow:hidden!important;background-position:center!important;background-size:cover!important;background-repeat:no-repeat!important}
+
+/* Profile is no longer part of Settings. */
+.settings-page .profile-card{display:none!important}
+
+@media(max-width:760px){
+  .profile-trigger-name{display:none}
+  .profile-trigger{padding-right:6px}
+  .profile-menu{position:fixed;right:12px;top:68px}
+}
