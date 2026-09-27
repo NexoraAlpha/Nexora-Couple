@@ -18,7 +18,11 @@ create table if not exists public.couples (
   pair_code text unique not null,
   user_a uuid references auth.users(id) on delete cascade,
   user_b uuid references auth.users(id) on delete cascade,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  pair_code_created_at timestamptz not null default now(),
+  disconnect_requested_by uuid references auth.users(id) on delete set null,
+  disconnect_requested_at timestamptz,
+  disconnect_status text not null default 'none'
 );
 
 create table if not exists public.couple_locations (
@@ -90,6 +94,12 @@ begin
     raise exception 'Invalid pairing code';
   end if;
 
+  -- Hapus kode milik sendiri yang sudah expired dan belum dipakai.
+  delete from public.couples
+  where user_a = auth.uid()
+    and user_b is null
+    and pair_code_created_at < now() - interval '5 minutes';
+
   if exists (
     select 1
     from public.couples c
@@ -98,8 +108,8 @@ begin
     raise exception 'You are already paired';
   end if;
 
-  insert into public.couples(pair_code, user_a)
-  values (v_code, auth.uid())
+  insert into public.couples(pair_code, pair_code_created_at, user_a, disconnect_status)
+  values (v_code, now(), auth.uid(), 'none')
   returning id into v_id;
 
   return v_id;
@@ -119,6 +129,7 @@ declare
   v_id uuid;
   v_a uuid;
   v_b uuid;
+  v_created timestamptz;
   v_code text;
 begin
   if auth.uid() is null then
@@ -127,14 +138,18 @@ begin
 
   v_code := upper(trim(p_code));
 
-  select id, user_a, user_b
-  into v_id, v_a, v_b
+  select id, user_a, user_b, pair_code_created_at
+  into v_id, v_a, v_b, v_created
   from public.couples
   where pair_code = v_code
   limit 1;
 
   if v_id is null then
     raise exception 'Pairing code not found';
+  end if;
+
+  if v_created < now() - interval '5 minutes' then
+    raise exception 'Pairing code has expired. Please create a new code.';
   end if;
 
   if v_a = auth.uid() then
@@ -162,18 +177,26 @@ begin
 end;
 $$;
 
-create or replace function public.my_pair()
+drop function if exists public.my_pair();
+
+create function public.my_pair()
 returns table(
   id uuid,
   pair_code text,
   user_a uuid,
-  user_b uuid
+  user_b uuid,
+  pair_code_created_at timestamptz,
+  disconnect_requested_by uuid,
+  disconnect_requested_at timestamptz,
+  disconnect_status text
 )
 language sql
 security definer
 set search_path = public
 as $$
-  select c.id, c.pair_code, c.user_a, c.user_b
+  select
+    c.id, c.pair_code, c.user_a, c.user_b, c.pair_code_created_at,
+    c.disconnect_requested_by, c.disconnect_requested_at, c.disconnect_status
   from public.couples c
   where c.user_a = auth.uid() or c.user_b = auth.uid()
   order by c.created_at desc

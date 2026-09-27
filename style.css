@@ -238,3 +238,5 @@ body:before{
 .profile-trigger-avatar{width:30px!important;height:30px!important;min-width:30px!important;max-width:30px!important;aspect-ratio:1/1!important;border-radius:50%!important}
 .profile-trigger-name,.profile-chevron{display:none!important}
 @media(max-width:760px){.top-actions{gap:6px!important}.profile-trigger{width:38px!important;height:38px!important;min-width:38px!important}.notification-button{width:38px!important;height:38px!important}}
+
+.pair-timer{font-size:12px;font-weight:800;letter-spacing:.08em;color:#ffb0d2;margin-top:7px}.pair-timer.expired{color:#ff7da9}.pair-code{min-width:150px}

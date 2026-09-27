@@ -486,6 +486,53 @@ function toggleLocation() {
   else startLocationSharing();
 }
 
+let pairTimerInterval = null;
+
+function stopPairTimer() {
+  if (pairTimerInterval) {
+    clearInterval(pairTimerInterval);
+    pairTimerInterval = null;
+  }
+}
+
+function renderPairTimer(createdAt, code) {
+  const timer = $('pairTimer');
+  const codeEl = $('generatedCode');
+  if (!timer || !codeEl) return;
+
+  stopPairTimer();
+
+  if (!createdAt || !code) {
+    timer.hidden = true;
+    return;
+  }
+
+  const update = () => {
+    const elapsed = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
+    const remaining = Math.max(0, 300 - elapsed);
+    const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
+    const seconds = String(remaining % 60).padStart(2, '0');
+    timer.textContent = remaining > 0 ? `Berakhir dalam ${minutes}:${seconds}` : 'Kode expired';
+    timer.hidden = false;
+
+    if (remaining <= 0) {
+      stopPairTimer();
+      codeEl.textContent = 'KODE EXPIRED';
+      timer.classList.add('expired');
+      const create = $('createPair');
+      if (create) {
+        create.disabled = false;
+        create.textContent = 'Buat kode baru';
+      }
+    } else {
+      timer.classList.remove('expired');
+    }
+  };
+
+  update();
+  pairTimerInterval = setInterval(update, 1000);
+}
+
 function generatePairCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const bytes = new Uint32Array(6);
@@ -511,6 +558,7 @@ async function createCode() {
   }
 
   setText('generatedCode', code);
+  renderPairTimer(new Date().toISOString(), code);
   const input = $('pairCode');
   if (input) input.value = '';
 
@@ -585,7 +633,21 @@ async function loadPair() {
   if (cancelBtn) cancelBtn.hidden = !requestedByMe;
 
   if (myPair?.pair_code && !paired) {
-    setText('generatedCode', myPair.pair_code);
+    const createdAt = myPair.pair_code_created_at || myPair.created_at;
+    const age = createdAt ? Date.now() - new Date(createdAt).getTime() : 0;
+    if (age >= 300000) {
+      stopPairTimer();
+      setText('generatedCode', 'KODE EXPIRED');
+      const timer = $('pairTimer');
+      if (timer) { timer.hidden = false; timer.textContent = 'Kode expired'; timer.classList.add('expired'); }
+    } else {
+      setText('generatedCode', myPair.pair_code);
+      renderPairTimer(createdAt, myPair.pair_code);
+    }
+  } else {
+    stopPairTimer();
+    const timer = $('pairTimer');
+    if (timer) timer.hidden = true;
   }
 
   const create = $('createPair');
@@ -594,7 +656,7 @@ async function loadPair() {
 
   if (create) {
     create.disabled = paired;
-    create.textContent = paired ? 'Sudah paired' : 'Buat kode';
+    create.textContent = paired ? 'Sudah paired' : (myPair?.pair_code && myPair?.pair_code_created_at && (Date.now() - new Date(myPair.pair_code_created_at).getTime()) >= 300000 ? 'Buat kode baru' : 'Buat kode');
   }
 
   if (join) {
