@@ -1053,6 +1053,35 @@ function setupButtons() {
     });
   }
 
+  // Couple disconnect controls (settings.html)
+  // These listeners were missing, so the "Putuskan pasangan" button
+  // rendered correctly but never called the Supabase RPC.
+  if ($('leavePair')) {
+    $('leavePair').onclick = async () => {
+      const btn = $('leavePair');
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        await requestLeavePair();
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  }
+
+  if ($('cancelLeavePair')) {
+    $('cancelLeavePair').onclick = async () => {
+      const btn = $('cancelLeavePair');
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        await cancelLeaveRequest();
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  }
+
   if ($('refreshBtn')) {
     $('refreshBtn').onclick = async () => {
       await loadPair();
