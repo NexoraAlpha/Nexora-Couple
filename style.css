@@ -27,3 +27,67 @@ body{min-height:100dvh;overflow:hidden}
 }
 .bottom-nav .nav-link svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.bottom-nav .nav-link.active svg{filter:drop-shadow(0 0 8px rgba(180,205,255,.28))}
 .bottom-nav .nav-link svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.bottom-nav .nav-link.active svg{filter:drop-shadow(0 0 8px rgba(180,205,255,.28))}
+
+
+/* NEXORA COUPLE — functional layout fixes
+   Keeps the existing visual system while allowing each page to scroll
+   just enough to reveal all content behind the fixed navigation. */
+html,body{
+  height:100%;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain;
+}
+body{min-height:100dvh}
+.shell,.page-shell{
+  scrollbar-width:thin;
+  scrollbar-color:rgba(157,189,255,.35) transparent;
+  overscroll-behavior-y:contain;
+}
+.shell::-webkit-scrollbar,.page-shell::-webkit-scrollbar{width:4px}
+.shell::-webkit-scrollbar-track,.page-shell::-webkit-scrollbar-track{background:transparent}
+.shell::-webkit-scrollbar-thumb{
+  background:rgba(157,189,255,.35);
+  border-radius:999px;
+}
+.page-shell::-webkit-scrollbar-thumb{
+  background:rgba(157,189,255,.35);
+  border-radius:999px;
+}
+
+/* Home is a scrollable app screen, not a long free-scrolling website. */
+.shell{
+  height:calc(100dvh - 76px);
+  margin-top:70px;
+  padding-top:22px;
+  padding-bottom:118px;
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+.page-shell{
+  height:calc(100dvh - 76px);
+  margin-top:70px;
+  padding-top:0;
+  padding-bottom:118px;
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+.page-shell .location-card{min-height:360px}
+.page-shell .settings-list{padding-bottom:8px}
+.page-shell .couple-status{margin-bottom:8px}
+
+/* Keep the fixed nav above content without hiding the final card. */
+.bottom-nav{bottom:max(8px,env(safe-area-inset-bottom));}
+.toast{bottom:calc(88px + env(safe-area-inset-bottom));}
+
+/* Disabled pairing controls remain visually consistent instead of looking broken. */
+.btn:disabled,.join input:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
+.switch{
+  border:1px solid rgba(255,255,255,.08);
+  cursor:pointer;
+  padding:0;
+}
