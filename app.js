@@ -54,7 +54,13 @@ function setSharingUI(active) {
 }
 
 function isPaired() {
-  return !!(myPair?.user_a && myPair?.user_b);
+  // A pending pairing row (user_b = null) is NOT a paired account.
+  // Only two distinct users count as connected.
+  return !!(
+    myPair?.user_a &&
+    myPair?.user_b &&
+    myPair.user_a !== myPair.user_b
+  );
 }
 
 function initMap() {

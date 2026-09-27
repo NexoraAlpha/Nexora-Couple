@@ -1,6 +1,9 @@
--- NEXORA COUPLE — Supabase setup
--- Jalankan di Supabase project KHUSUS Nexora Couple.
--- Anonymous Sign-Ins harus diaktifkan di Authentication > Sign In / Providers.
+-- =========================================================
+-- NOVERA COUPLE — SUPABASE SETUP + PAIR CODE 5 MINUTES
+-- =========================================================
+-- Jalankan di Supabase SQL Editor.
+-- Script ini aman untuk schema yang sudah pernah dibuat:
+-- kolom yang dibutuhkan ditambahkan dengan IF NOT EXISTS.
 
 create extension if not exists pgcrypto;
 
@@ -11,7 +14,6 @@ create table if not exists public.couple_profiles (
   email text,
   updated_at timestamptz not null default now()
 );
-
 
 create table if not exists public.couples (
   id uuid primary key default gen_random_uuid(),
@@ -24,6 +26,22 @@ create table if not exists public.couples (
   disconnect_requested_at timestamptz,
   disconnect_status text not null default 'none'
 );
+
+-- Penting untuk database lama yang tabel couples-nya sudah ada.
+alter table public.couples
+  add column if not exists pair_code_created_at timestamptz;
+
+update public.couples
+set pair_code_created_at = coalesce(created_at, now())
+where pair_code_created_at is null;
+
+alter table public.couples
+  alter column pair_code_created_at set default now();
+
+alter table public.couples
+  add column if not exists disconnect_requested_by uuid references auth.users(id) on delete set null,
+  add column if not exists disconnect_requested_at timestamptz,
+  add column if not exists disconnect_status text not null default 'none';
 
 create table if not exists public.couple_locations (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -39,13 +57,25 @@ create table if not exists public.couple_presence (
   last_seen timestamptz not null default now()
 );
 
+create table if not exists public.couple_notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  type text not null,
+  title text not null,
+  body text not null default '',
+  data jsonb not null default '{}'::jsonb,
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists couple_notifications_user_created_idx
+  on public.couple_notifications(user_id, created_at desc);
+
 alter table public.couples enable row level security;
 alter table public.couple_locations enable row level security;
 alter table public.couple_presence enable row level security;
 alter table public.couple_profiles enable row level security;
-
--- Users do not get direct SELECT access to partner data.
--- Pairing and partner reads happen through the security-definer RPCs below.
+alter table public.couple_notifications enable row level security;
 
 drop policy if exists "users can read own pair" on public.couples;
 drop policy if exists "users can create pair" on public.couples;
@@ -55,6 +85,8 @@ drop policy if exists "own location select" on public.couple_locations;
 drop policy if exists "own presence write" on public.couple_presence;
 drop policy if exists "own presence select" on public.couple_presence;
 drop policy if exists "own profile all" on public.couple_profiles;
+drop policy if exists "own notifications select" on public.couple_notifications;
+drop policy if exists "own notifications update" on public.couple_notifications;
 
 create policy "own profile all"
 on public.couple_profiles
@@ -74,7 +106,23 @@ for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
-create or replace function public.create_pair(p_code text)
+create policy "own notifications select"
+on public.couple_notifications
+for select
+using (auth.uid() = user_id);
+
+create policy "own notifications update"
+on public.couple_notifications
+for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+-- =========================================================
+-- CREATE PAIR — kode berlaku 5 menit
+-- =========================================================
+
+drop function if exists public.create_pair(text);
+create function public.create_pair(p_code text)
 returns uuid
 language plpgsql
 security definer
@@ -94,32 +142,53 @@ begin
     raise exception 'Invalid pairing code';
   end if;
 
-  -- Hapus kode milik sendiri yang sudah expired dan belum dipakai.
+  -- Buang pairing pending milik user sendiri yang sudah expired.
   delete from public.couples
-  where user_a = auth.uid()
+  where (user_a = auth.uid() or user_b = auth.uid())
     and user_b is null
     and pair_code_created_at < now() - interval '5 minutes';
 
+  -- Hanya pairing aktif / kode pending yang belum expired yang memblokir user.
   if exists (
     select 1
     from public.couples c
-    where c.user_a = auth.uid() or c.user_b = auth.uid()
+    where (c.user_a = auth.uid() or c.user_b = auth.uid())
+      and (
+        c.user_b is not null
+        or c.pair_code_created_at >= now() - interval '5 minutes'
+      )
   ) then
     raise exception 'You are already paired';
   end if;
 
-  insert into public.couples(pair_code, pair_code_created_at, user_a, disconnect_status)
-  values (v_code, now(), auth.uid(), 'none')
+  insert into public.couples (
+    pair_code,
+    user_a,
+    pair_code_created_at,
+    disconnect_status
+  )
+  values (
+    v_code,
+    auth.uid(),
+    now(),
+    'none'
+  )
   returning id into v_id;
 
   return v_id;
+
 exception
   when unique_violation then
     raise exception 'Pairing code already exists. Try again.';
 end;
 $$;
 
-create or replace function public.join_pair(p_code text)
+-- =========================================================
+-- JOIN PAIR — kode berlaku 5 menit
+-- =========================================================
+
+drop function if exists public.join_pair(text);
+create function public.join_pair(p_code text)
 returns uuid
 language plpgsql
 security definer
@@ -138,8 +207,27 @@ begin
 
   v_code := upper(trim(p_code));
 
-  select id, user_a, user_b, pair_code_created_at
-  into v_id, v_a, v_b, v_created
+  if v_code !~ '^[A-Z0-9]{6}$' then
+    raise exception 'Invalid pairing code';
+  end if;
+
+  -- FIX UTAMA:
+  -- akun yang punya kode pending lama/expired tidak boleh dianggap already paired.
+  delete from public.couples
+  where (user_a = auth.uid() or user_b = auth.uid())
+    and user_b is null
+    and pair_code_created_at < now() - interval '5 minutes';
+
+  select
+    id,
+    user_a,
+    user_b,
+    pair_code_created_at
+  into
+    v_id,
+    v_a,
+    v_b,
+    v_created
   from public.couples
   where pair_code = v_code
   limit 1;
@@ -148,7 +236,7 @@ begin
     raise exception 'Pairing code not found';
   end if;
 
-  if v_created < now() - interval '5 minutes' then
+  if v_created is null or v_created < now() - interval '5 minutes' then
     raise exception 'Pairing code has expired. Please create a new code.';
   end if;
 
@@ -160,10 +248,15 @@ begin
     raise exception 'Pairing code already used';
   end if;
 
+  -- Jangan menganggap pending code milik user sebagai pasangan aktif.
   if exists (
     select 1
     from public.couples c
-    where c.user_a = auth.uid() or c.user_b = auth.uid()
+    where (c.user_a = auth.uid() or c.user_b = auth.uid())
+      and (
+        c.user_b is not null
+        or c.pair_code_created_at >= now() - interval '5 minutes'
+      )
   ) then
     raise exception 'You are already paired';
   end if;
@@ -173,12 +266,19 @@ begin
   where id = v_id
     and user_b is null;
 
+  if not found then
+    raise exception 'Pairing code already used';
+  end if;
+
   return v_id;
 end;
 $$;
 
-drop function if exists public.my_pair();
+-- =========================================================
+-- MY PAIR
+-- =========================================================
 
+drop function if exists public.my_pair();
 create function public.my_pair()
 returns table(
   id uuid,
@@ -195,15 +295,30 @@ security definer
 set search_path = public
 as $$
   select
-    c.id, c.pair_code, c.user_a, c.user_b, c.pair_code_created_at,
-    c.disconnect_requested_by, c.disconnect_requested_at, c.disconnect_status
+    c.id,
+    c.pair_code,
+    c.user_a,
+    c.user_b,
+    c.pair_code_created_at,
+    c.disconnect_requested_by,
+    c.disconnect_requested_at,
+    c.disconnect_status
   from public.couples c
-  where c.user_a = auth.uid() or c.user_b = auth.uid()
+  where (c.user_a = auth.uid() or c.user_b = auth.uid())
+    and (
+      c.user_b is not null
+      or c.pair_code_created_at >= now() - interval '5 minutes'
+    )
   order by c.created_at desc
   limit 1;
 $$;
 
-create or replace function public.partner_snapshot()
+-- =========================================================
+-- PARTNER SNAPSHOT
+-- =========================================================
+
+drop function if exists public.partner_snapshot();
+create function public.partner_snapshot()
 returns table(
   user_id uuid,
   display_name text,
@@ -246,15 +361,17 @@ as $$
     coalesce(cl.speed_kmh, 0),
     cl.updated_at
   from p
-  left join public.couple_presence cp
-    on cp.user_id = p.partner_id
-  left join public.couple_profiles pro
-    on pro.user_id = p.partner_id
-  left join public.couple_locations cl
-    on cl.user_id = p.partner_id;
+  left join public.couple_presence cp on cp.user_id = p.partner_id
+  left join public.couple_profiles pro on pro.user_id = p.partner_id
+  left join public.couple_locations cl on cl.user_id = p.partner_id;
 $$;
 
-create or replace function public.leave_pair()
+-- =========================================================
+-- DISCONNECT: HARUS DISETUJUI KEDUA PIHAK
+-- =========================================================
+
+drop function if exists public.leave_pair();
+create function public.leave_pair()
 returns boolean
 language plpgsql
 security definer
@@ -281,17 +398,193 @@ begin
 end;
 $$;
 
-grant execute on function public.create_pair(text) to authenticated, anon;
-grant execute on function public.join_pair(text) to authenticated, anon;
-grant execute on function public.my_pair() to authenticated, anon;
-grant execute on function public.partner_snapshot() to authenticated, anon;
-grant execute on function public.leave_pair() to authenticated, anon;
+create or replace function public.request_leave_pair()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  c public.couples%rowtype;
+  partner uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into c
+  from public.couples
+  where (user_a = auth.uid() or user_b = auth.uid())
+    and user_b is not null
+  order by created_at desc
+  limit 1;
+
+  if c.id is null then
+    raise exception 'Belum ada pasangan yang terhubung';
+  end if;
+
+  partner := case when c.user_a = auth.uid() then c.user_b else c.user_a end;
+
+  if c.disconnect_status = 'pending' then
+    return jsonb_build_object('already_pending', true);
+  end if;
+
+  update public.couples
+  set disconnect_requested_by = auth.uid(),
+      disconnect_requested_at = now(),
+      disconnect_status = 'pending'
+  where id = c.id;
+
+  insert into public.couple_notifications(user_id,type,title,body,data)
+  values (
+    partner,
+    'disconnect_request',
+    'Permintaan putus pasangan',
+    'Pasanganmu mengajukan permintaan untuk mengakhiri pairing. Persetujuanmu diperlukan.',
+    jsonb_build_object('pair_id', c.id)
+  );
+
+  return jsonb_build_object('already_pending', false);
+end;
+$$;
+
+create or replace function public.cancel_leave_pair()
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  c public.couples%rowtype;
+  partner uuid;
+begin
+  select * into c
+  from public.couples
+  where (user_a = auth.uid() or user_b = auth.uid())
+    and disconnect_status = 'pending'
+    and disconnect_requested_by = auth.uid()
+  limit 1;
+
+  if c.id is null then return false; end if;
+
+  partner := case when c.user_a = auth.uid() then c.user_b else c.user_a end;
+
+  update public.couples
+  set disconnect_requested_by = null,
+      disconnect_requested_at = null,
+      disconnect_status = 'none'
+  where id = c.id;
+
+  insert into public.couple_notifications(user_id,type,title,body,data)
+  values (
+    partner,
+    'disconnect_cancelled',
+    'Permintaan putus dibatalkan',
+    'Pasanganmu membatalkan permintaan untuk mengakhiri pairing.',
+    jsonb_build_object('pair_id', c.id)
+  );
+
+  return true;
+end;
+$$;
+
+create or replace function public.reject_leave_pair()
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  c public.couples%rowtype;
+  requester uuid;
+begin
+  select * into c
+  from public.couples
+  where (user_a = auth.uid() or user_b = auth.uid())
+    and disconnect_status = 'pending'
+    and disconnect_requested_by <> auth.uid()
+  limit 1;
+
+  if c.id is null then return false; end if;
+
+  requester := c.disconnect_requested_by;
+
+  update public.couples
+  set disconnect_requested_by = null,
+      disconnect_requested_at = null,
+      disconnect_status = 'none'
+  where id = c.id;
+
+  insert into public.couple_notifications(user_id,type,title,body,data)
+  values (
+    requester,
+    'disconnect_rejected',
+    'Permintaan putus ditolak',
+    'Pasanganmu menolak permintaan untuk mengakhiri pairing.',
+    jsonb_build_object('pair_id', c.id)
+  );
+
+  return true;
+end;
+$$;
+
+create or replace function public.approve_leave_pair()
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  c public.couples%rowtype;
+  requester uuid;
+begin
+  select * into c
+  from public.couples
+  where (user_a = auth.uid() or user_b = auth.uid())
+    and disconnect_status = 'pending'
+    and disconnect_requested_by <> auth.uid()
+  limit 1;
+
+  if c.id is null then return false; end if;
+
+  requester := c.disconnect_requested_by;
+
+  insert into public.couple_notifications(user_id,type,title,body,data)
+  values (
+    requester,
+    'disconnect_approved',
+    'Permintaan putus disetujui',
+    'Pasanganmu menyetujui pengakhiran pairing. Koneksi telah diputus.',
+    jsonb_build_object('pair_id', c.id)
+  );
+
+  delete from public.couple_locations where user_id in (c.user_a, c.user_b);
+  update public.couple_presence
+  set is_online = false, last_seen = now()
+  where user_id in (c.user_a, c.user_b);
+  delete from public.couples where id = c.id;
+
+  return true;
+end;
+$$;
+
+-- =========================================================
+-- PERMISSIONS
+-- =========================================================
+
+grant execute on function public.create_pair(text) to authenticated;
+grant execute on function public.join_pair(text) to authenticated;
+grant execute on function public.my_pair() to authenticated;
+grant execute on function public.partner_snapshot() to authenticated;
+grant execute on function public.leave_pair() to authenticated;
+grant execute on function public.request_leave_pair() to authenticated;
+grant execute on function public.cancel_leave_pair() to authenticated;
+grant execute on function public.reject_leave_pair() to authenticated;
+grant execute on function public.approve_leave_pair() to authenticated;
 
 -- Catatan:
--- 1. Anonymous Sign-Ins harus ON.
--- 2. Frontend mengirim heartbeat presence setiap 15 detik.
--- 3. Partner dianggap offline jika heartbeat terakhir >45 detik.
--- 4. Lokasi hanya ditulis setelah akun paired dan user mengaktifkan sharing.
-
-
--- =========================================================\n-- NOVERA DISCONNECT CONSENT + NOTIFICATIONS\n-- =========================================================\n\nalter table public.couples\n  add column if not exists disconnect_requested_by uuid references auth.users(id) on delete set null,\n  add column if not exists disconnect_requested_at timestamptz,\n  add column if not exists disconnect_status text not null default 'none';\n\ncreate table if not exists public.couple_notifications (\n  id uuid primary key default gen_random_uuid(),\n  user_id uuid not null references auth.users(id) on delete cascade,\n  type text not null,\n  title text not null,\n  body text not null default '',\n  data jsonb not null default '{}'::jsonb,\n  read_at timestamptz,\n  created_at timestamptz not null default now()\n);\n\ncreate index if not exists couple_notifications_user_created_idx\n  on public.couple_notifications(user_id, created_at desc);\n\nalter table public.couple_notifications enable row level security;\ndrop policy if exists "own notifications select" on public.couple_notifications;\ndrop policy if exists "own notifications update" on public.couple_notifications;\ncreate policy "own notifications select" on public.couple_notifications for select using (auth.uid() = user_id);\ncreate policy "own notifications update" on public.couple_notifications for update using (auth.uid() = user_id) with check (auth.uid() = user_id);\n\n-- Replace my_pair so the frontend can show pending consent state.\ndrop function if exists public.my_pair();\ncreate function public.my_pair()\nreturns table(\n  id uuid, pair_code text, user_a uuid, user_b uuid,\n  disconnect_requested_by uuid, disconnect_requested_at timestamptz, disconnect_status text\n)\nlanguage sql security definer set search_path = public\nas $$\n  select c.id, c.pair_code, c.user_a, c.user_b,\n         c.disconnect_requested_by, c.disconnect_requested_at, c.disconnect_status\n  from public.couples c\n  where c.user_a = auth.uid() or c.user_b = auth.uid()\n  order by c.created_at desc limit 1;\n$$;\n\ncreate or replace function public.request_leave_pair()\nreturns jsonb\nlanguage plpgsql security definer set search_path = public\nas $$\ndeclare\n  c public.couples%rowtype;\n  partner uuid;\n  already boolean := false;\nbegin\n  if auth.uid() is null then raise exception 'Not authenticated'; end if;\n  select * into c from public.couples where (user_a = auth.uid() or user_b = auth.uid()) limit 1;\n  if c.id is null or c.user_b is null then raise exception 'Belum ada pasangan yang terhubung'; end if;\n  partner := case when c.user_a = auth.uid() then c.user_b else c.user_a end;\n  if c.disconnect_status = 'pending' then return jsonb_build_object('already_pending', true); end if;\n\n  update public.couples set disconnect_requested_by = auth.uid(), disconnect_requested_at = now(), disconnect_status = 'pending' where id = c.id;\n  insert into public.couple_notifications(user_id,type,title,body,data)\n  values (partner,'disconnect_request','Permintaan putus pasangan','Pasanganmu mengajukan permintaan untuk mengakhiri pairing. Persetujuanmu diperlukan.',jsonb_build_object('pair_id',c.id));\n  return jsonb_build_object('already_pending', false);\nend;\n$$;\n\ncreate or replace function public.cancel_leave_pair()\nreturns boolean\nlanguage plpgsql security definer set search_path = public\nas $$\ndeclare c public.couples%rowtype; partner uuid;\nbegin\n  select * into c from public.couples where (user_a = auth.uid() or user_b = auth.uid()) and disconnect_status = 'pending' and disconnect_requested_by = auth.uid() limit 1;\n  if c.id is null then return false; end if;\n  partner := case when c.user_a = auth.uid() then c.user_b else c.user_a end;\n  update public.couples set disconnect_requested_by = null, disconnect_requested_at = null, disconnect_status = 'none' where id = c.id;\n  insert into public.couple_notifications(user_id,type,title,body,data) values (partner,'disconnect_cancelled','Permintaan putus dibatalkan','Pasanganmu membatalkan permintaan untuk mengakhiri pairing.',jsonb_build_object('pair_id',c.id));\n  return true;\nend;\n$$;\n\ncreate or replace function public.reject_leave_pair()\nreturns boolean\nlanguage plpgsql security definer set search_path = public\nas $$\ndeclare c public.couples%rowtype; requester uuid;\nbegin\n  select * into c from public.couples where (user_a = auth.uid() or user_b = auth.uid()) and disconnect_status = 'pending' and disconnect_requested_by <> auth.uid() limit 1;\n  if c.id is null then return false; end if;\n  requester := c.disconnect_requested_by;\n  update public.couples set disconnect_requested_by = null, disconnect_requested_at = null, disconnect_status = 'none' where id = c.id;\n  insert into public.couple_notifications(user_id,type,title,body,data) values (requester,'disconnect_rejected','Permintaan putus ditolak','Pasanganmu menolak permintaan untuk mengakhiri pairing.',jsonb_build_object('pair_id',c.id));\n  return true;\nend;\n$$;\n\ncreate or replace function public.approve_leave_pair()\nreturns boolean\nlanguage plpgsql security definer set search_path = public\nas $$\ndeclare c public.couples%rowtype; requester uuid; other uuid;\nbegin\n  select * into c from public.couples where (user_a = auth.uid() or user_b = auth.uid()) and disconnect_status = 'pending' and disconnect_requested_by <> auth.uid() limit 1;\n  if c.id is null then return false; end if;\n  requester := c.disconnect_requested_by;\n  other := case when c.user_a = auth.uid() then c.user_b else c.user_a end;\n  insert into public.couple_notifications(user_id,type,title,body,data) values (requester,'disconnect_approved','Permintaan putus disetujui','Pasanganmu menyetujui pengakhiran pairing. Koneksi telah diputus.',jsonb_build_object('pair_id',c.id));\n  delete from public.couple_locations where user_id in (c.user_a,c.user_b);\n  update public.couple_presence set is_online = false, last_seen = now() where user_id in (c.user_a,c.user_b);\n  delete from public.couples where id = c.id;\n  return true;\nend;\n$$;\n\ngrant execute on function public.request_leave_pair() to authenticated;\ngrant execute on function public.cancel_leave_pair() to authenticated;\ngrant execute on function public.reject_leave_pair() to authenticated;\ngrant execute on function public.approve_leave_pair() to authenticated;\n
+-- 1. User wajib login dengan akun email sebelum fitur couple digunakan.
+-- 2. Kode pairing berlaku 5 menit.
+-- 3. Kode pending yang expired otomatis tidak lagi memblokir akun.
+-- 4. Partner dianggap offline jika heartbeat terakhir >45 detik.
+-- 5. Putus pasangan membutuhkan persetujuan kedua pihak.
