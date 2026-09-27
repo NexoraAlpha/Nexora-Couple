@@ -246,9 +246,8 @@ async function logoutAccount() {
 
 async function requestLeavePair() {
   if (!sb || !myUser) return;
+  if (!isPaired()) { toast('Belum ada pasangan yang terhubung.'); return; }
 
-  // The database is the source of truth for the current couple.
-  // Do not reject the request using cached myPair/isPaired() state.
   const { data, error } = await sb.rpc('request_leave_pair');
   if (error) { toast(error.message || 'Permintaan belum dapat dikirim.'); return; }
 
@@ -1043,10 +1042,6 @@ function setupButtons() {
 
   if ($('createPair')) $('createPair').onclick = createCode;
   if ($('joinPair')) $('joinPair').onclick = joinCode;
-
-  // Disconnect controls only.
-  if ($('leavePair')) $('leavePair').onclick = requestLeavePair;
-  if ($('cancelLeavePair')) $('cancelLeavePair').onclick = cancelLeaveRequest;
 
   if ($('pairCode')) {
     $('pairCode').addEventListener('input', e => {
