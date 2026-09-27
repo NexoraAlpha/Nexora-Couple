@@ -1043,6 +1043,12 @@ function setupButtons() {
   if ($('createPair')) $('createPair').onclick = createCode;
   if ($('joinPair')) $('joinPair').onclick = joinCode;
 
+  // Couple disconnect actions (settings.html).
+  // Keep the existing UI/flow intact; wire the buttons to the already
+  // implemented Supabase RPC handlers.
+  if ($('leavePair')) $('leavePair').onclick = requestLeavePair;
+  if ($('cancelLeavePair')) $('cancelLeavePair').onclick = cancelLeaveRequest;
+
   if ($('pairCode')) {
     $('pairCode').addEventListener('input', e => {
       e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
