@@ -91,3 +91,74 @@ body{min-height:100dvh}
   cursor:pointer;
   padding:0;
 }
+
+/* NOVERA COUPLE — romantic pink theme
+   Theme-only override: preserves existing layout, navigation, markup and functionality. */
+:root{
+  --bg:#09030a;
+  --panel:rgba(27,8,24,.74);
+  --line:rgba(255,170,214,.13);
+  --text:#fff8fc;
+  --muted:#b9a6b5;
+  --blue:#ff8fc7;
+  --blue2:#ffe3f1;
+  --green:#ff79b9;
+  --pink:#ff5da9;
+  --pink2:#ff9dcc;
+  --magenta:#d93b8d;
+  --shadow:0 25px 80px rgba(0,0,0,.52),0 0 55px rgba(255,66,157,.07)
+}
+body:before{
+  background:
+    radial-gradient(circle at 48% 0,#7d164f 0,rgba(125,22,79,.30) 18%,transparent 45%),
+    radial-gradient(circle at 100% 60%,#4b123d 0,transparent 32%),
+    #09030a
+}
+.bg-grid{
+  background-image:linear-gradient(rgba(255,180,220,.75) 1px,transparent 1px),linear-gradient(90deg,rgba(255,180,220,.75) 1px,transparent 1px)
+}
+.orb-a{background:#ff4f9d}
+.orb-b{background:#c72f91}
+.glass{
+  background:linear-gradient(145deg,rgba(38,12,32,.78),rgba(13,5,14,.66));
+  border-color:rgba(255,169,214,.14);
+  box-shadow:var(--shadow)
+}
+.brand img{filter:drop-shadow(0 0 15px rgba(255,105,177,.42))}
+.brand span,.eyebrow,.label{color:#e49abe}
+.pair-pill{color:#e6c0d4}
+.hero-card h1,.page-hero h1,.page-title h1{
+  background:linear-gradient(110deg,#fff8fc,#ff9dcc 48%,#fff8fc);
+  -webkit-background-clip:text;
+  color:transparent
+}
+.hero-card h1 em,.page-hero h1 em{color:#ff91c7}
+.couple-visual .ring{
+  border-color:rgba(255,157,204,.28);
+  box-shadow:0 0 80px rgba(255,72,163,.18),inset 0 0 50px rgba(255,104,181,.08)
+}
+.ring:before,.ring:after{border-color:rgba(255,157,204,.14)}
+.ring img{filter:drop-shadow(0 0 25px rgba(255,132,194,.58))}
+.pulse{background:#ff79b9;box-shadow:0 0 0 10px rgba(255,105,180,.08),0 0 30px #ff5da9}
+.btn.primary{
+  background:linear-gradient(135deg,#ffeaf4,#ff9dca);
+  color:#260916
+}
+.btn{color:#fff0f7}
+.join input{color:#fff8fc}
+.pair-code{color:#ffb0d2}
+.dot.online{background:#ff72b7;box-shadow:0 0 0 6px rgba(255,114,183,.08),0 0 18px rgba(255,114,183,.55)}
+.avatar{background:linear-gradient(135deg,#ffe2ef,#c66b9b);color:#250914}
+.avatar.partner{background:linear-gradient(135deg,#ffeaf4,#b86b98)}
+.switch.on{background:#c43f82}
+.switch.on:after{background:#fff7fb}
+.big-number{color:#ffd4e8}
+.bottom-nav .nav-link.active{background:rgba(255,101,174,.13);color:#fff0f7}
+.bottom-nav .nav-link:hover{color:#fff0f7}
+.bottom-nav .nav-link.active svg{filter:drop-shadow(0 0 8px rgba(255,105,180,.42))}
+.toast{background:#210c1c;border-color:rgba(255,153,204,.16)}
+.shell,.page-shell{scrollbar-color:rgba(255,105,180,.38) transparent}
+.shell::-webkit-scrollbar-thumb,.page-shell::-webkit-scrollbar-thumb{background:rgba(255,105,180,.38)}
+.connection-row{background:rgba(255,105,180,.025)}
+
+/* Keep browser chrome/theme accents aligned with NOVERA. */
