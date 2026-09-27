@@ -11,8 +11,8 @@ let myUser = null;
 let myPair = null;
 let partnerTimer = null;
 let presenceTimer = null;
+let durationTimer = null;
 let presenceChannel = null;
-let pageStartedAt = Date.now();
 let myProfile = null;
 
 const $ = id => document.getElementById(id);
@@ -679,7 +679,21 @@ async function loadPair() {
 async function savePresence() {
   if (!sb || !myUser) return;
 
-  const now = new Date().toISOString();
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
+  const state = readPresenceActivity();
+
+  // Accumulate only time between successful dashboard heartbeats. This makes
+  // Phone presence persist across Home/Couple/Location navigation instead of
+  // resetting to 0m every time a page is opened.
+  if (state.lastTickAt) {
+    const gap = Math.max(0, Math.min(30000, nowMs - state.lastTickAt));
+    state.totalSeconds += gap / 1000;
+  }
+  state.day = presenceDayKey();
+  state.lastTickAt = nowMs;
+  writePresenceActivity(state);
+  updateActiveDuration();
 
   const { error } = await sb.from('couple_presence').upsert({
     user_id: myUser.id,
@@ -808,22 +822,74 @@ function timeAgo(value) {
   return `${Math.floor(h / 24)}h lalu`;
 }
 
+function presenceDayKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function presenceStorageKey() {
+  return myUser?.id ? `nexora_presence_${myUser.id}` : null;
+}
+
+function readPresenceActivity() {
+  const key = presenceStorageKey();
+  if (!key) return { day: presenceDayKey(), totalSeconds: 0, lastTickAt: 0 };
+
+  try {
+    const raw = JSON.parse(localStorage.getItem(key) || 'null');
+    if (!raw || raw.day !== presenceDayKey()) {
+      return { day: presenceDayKey(), totalSeconds: 0, lastTickAt: 0 };
+    }
+    return {
+      day: raw.day,
+      totalSeconds: Math.max(0, Number(raw.totalSeconds) || 0),
+      lastTickAt: Math.max(0, Number(raw.lastTickAt) || 0)
+    };
+  } catch (_) {
+    return { day: presenceDayKey(), totalSeconds: 0, lastTickAt: 0 };
+  }
+}
+
+function writePresenceActivity(state) {
+  const key = presenceStorageKey();
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(state));
+  } catch (_) {}
+}
+
 function updateActiveDuration() {
-  const mins = Math.floor((Date.now() - pageStartedAt) / 60000);
+  const state = readPresenceActivity();
+  let seconds = state.totalSeconds;
+
+  // Only count a short gap since the last heartbeat. A closed/backgrounded
+  // tab must not keep accumulating "active" time while the app is unused.
+  if (state.lastTickAt) {
+    const gap = Math.max(0, Math.min(30000, Date.now() - state.lastTickAt));
+    seconds += gap / 1000;
+  }
+
+  const mins = Math.floor(seconds / 60);
   setText('activeDuration', `${mins}m`);
 }
 
 function startTimers() {
   clearInterval(presenceTimer);
   clearInterval(partnerTimer);
+  clearInterval(durationTimer);
 
   savePresence().catch(() => {});
   updateActiveDuration();
 
   presenceTimer = setInterval(() => {
     savePresence().catch(() => {});
-    updateActiveDuration();
   }, 15000);
+
+  // Keep the Phone presence counter in sync even when no database write is
+  // needed yet (the displayed value is still based on the heartbeat clock).
+  durationTimer = setInterval(updateActiveDuration, 1000);
 
   partnerTimer = setInterval(() => {
     loadPair().then(loadPartner).catch(() => {});
