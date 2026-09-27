@@ -32,6 +32,7 @@ function pageName() {
   if (clean === 'location') return 'location';
   if (clean === 'couple') return 'couple';
   if (clean === 'settings') return 'settings';
+  if (clean === 'connect') return 'connect';
   if (clean === 'auth') return 'auth';
   return 'home';
 }
@@ -625,6 +626,7 @@ async function loadPair() {
   setText('pairStatus', paired ? (pending ? 'Disconnect pending' : 'Paired') : 'Not paired');
   setText('partnerStatus', paired ? 'Offline' : 'Belum terhubung');
   setText('settingsPairStatus', paired ? (pending ? 'Disconnect pending' : 'Paired') : 'Not paired');
+  setText('coupleConnectionLabel', paired ? 'Paired' : 'Not paired');
   setText('disconnectStatus', !pending ? '' : (requestedByMe ? 'Menunggu persetujuan pasangan.' : 'Pasangan meminta mengakhiri pairing.'));
 
   document.querySelectorAll('[data-disconnect-request]').forEach(el => {
@@ -695,10 +697,22 @@ async function savePresence() {
   writePresenceActivity(state);
   updateActiveDuration();
 
+  let battery_percent = null;
+  let charging = null;
+  try {
+    if (navigator.getBattery) {
+      const battery = await navigator.getBattery();
+      battery_percent = Math.round(battery.level * 100);
+      charging = !!battery.charging;
+    }
+  } catch (_) {}
+
   const { error } = await sb.from('couple_presence').upsert({
     user_id: myUser.id,
     is_online: true,
-    last_seen: now
+    last_seen: now,
+    battery_percent,
+    charging
   }, { onConflict: 'user_id' });
 
   if (error) {
@@ -779,6 +793,7 @@ async function loadPartner() {
   setText('partnerStatus', status);
   setOnline('partnerDot', p.is_online);
   setText('partnerLast', p.last_seen ? timeAgo(p.last_seen) : '—');
+  setText('partnerBattery', p.battery_percent != null ? `${p.battery_percent}%${p.charging ? ' · charging' : ''}` : 'Unavailable');
   setText('locationPartnerStatus', status);
   setText('locationPartnerLast', p.last_seen ? `Last active ${timeAgo(p.last_seen)}` : 'Last active —');
   document.querySelectorAll('[data-partner-avatar]').forEach(el => {
@@ -964,6 +979,62 @@ function setupNav() {
   });
 }
 
+
+async function sendSignal(signal) {
+  if (!await ensureAuth()) return;
+  if (!isPaired()) { toast('Hubungkan pasangan dulu.'); return; }
+  if (!sb) return;
+  const { error } = await sb.rpc('send_couple_signal', { p_signal: signal });
+  if (error) { toast(error.message || 'Signal belum dapat dikirim.'); return; }
+  toast(`${signal} terkirim 💗`);
+}
+
+function setupCoupleExtras() {
+  document.querySelectorAll('[data-signal]').forEach(btn => {
+    btn.onclick = () => sendSignal(btn.dataset.signal);
+  });
+
+  const dateBtn = $('setTogetherDate');
+  const dateKey = myUser?.id ? `novera_together_${myUser.id}` : null;
+  const renderTogether = () => {
+    if (!dateKey) return;
+    const saved = localStorage.getItem(dateKey);
+    if (!saved) { setText('togetherDays','— days'); setText('togetherLabel','Pilih tanggal jadian.'); return; }
+    const start = new Date(saved + 'T00:00:00');
+    if (Number.isNaN(start.getTime())) return;
+    const days = Math.max(0, Math.floor((new Date() - start) / 86400000));
+    setText('togetherDays', `${days} days`);
+    setText('togetherLabel', `Since ${start.toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})}`);
+  };
+  dateBtn?.addEventListener('click', () => {
+    const current = dateKey ? localStorage.getItem(dateKey) : '';
+    const value = prompt('Tanggal jadian (YYYY-MM-DD)', current || '');
+    if (value && /^\d{4}-\d{2}-\d{2}$/.test(value) && dateKey) {
+      localStorage.setItem(dateKey, value); renderTogether(); toast('Our Day disimpan.');
+    }
+  });
+  renderTogether();
+
+  const petKey = myUser?.id ? `novera_pet_${myUser.id}` : null;
+  let pet = {name:'Novi',energy:80,happy:90};
+  try { pet = {...pet, ...(JSON.parse(localStorage.getItem(petKey)||'{}'))}; } catch (_) {}
+  const renderPet=()=> {
+    setText('petName',pet.name);
+    setText('petStats',`${pet.happy >= 75 ? 'Happy' : pet.happy >= 45 ? 'Okay' : 'Needs love'} · Energy ${pet.energy}%`);
+  };
+  const act=(type)=>{
+    if(type==='feed'){pet.energy=Math.min(100,pet.energy+8);pet.happy=Math.min(100,pet.happy+4);}
+    if(type==='play'){pet.energy=Math.max(0,pet.energy-12);pet.happy=Math.min(100,pet.happy+10);}
+    if(type==='rest'){pet.energy=Math.min(100,pet.energy+18);pet.happy=Math.max(0,pet.happy-1);}
+    try{localStorage.setItem(petKey,JSON.stringify(pet));}catch(_){}
+    renderPet(); toast(type==='feed'?'Pet diberi makan 🍓':type==='play'?'Pet diajak main 🎾':'Pet sedang istirahat 💤');
+  };
+  $('petFeed')?.addEventListener('click',()=>act('feed'));
+  $('petPlay')?.addEventListener('click',()=>act('play'));
+  $('petRest')?.addEventListener('click',()=>act('rest'));
+  renderPet();
+}
+
 function setupButtons() {
   document.querySelectorAll('#locationToggle').forEach(el => {
     el.onclick = toggleLocation;
@@ -1062,6 +1133,7 @@ async function start() {
 
   await loadProfile();
   setupProfileUI();
+  setupCoupleExtras();
   await loadPair();
   await loadPartner();
   await loadNotifications();

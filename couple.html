@@ -7,35 +7,56 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="icon" href="./favicon-32.png">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
-  <title>Nexora Couple</title>
+  <title>Novera Couple</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="bg-grid"></div><div class="orb orb-a"></div><div class="orb orb-b"></div>
   <header class="topbar glass">
-    <a class="brand" href="./index.html" aria-label="Nexora Couple"><img src="./nexora-icon.svg" alt="Nexora"><div><b>NEXORA</b><span>COUPLE</span></div></a>
+    <a class="brand" href="./index.html" aria-label="Novera Couple"><img src="./nexora-icon.svg" alt="Novera"><div><b>NOVERA</b><span>COUPLE</span></div></a>
         <div class="top-actions"><div class="notification-wrap"><button class="notification-button" id="notificationButton" type="button" aria-label="Notifikasi">🔔<span class="notification-badge" id="notificationBadge" hidden>0</span></button><div class="notification-panel glass" id="notificationPanel"><div class="notification-head"><strong>Notifikasi</strong><button id="notificationMarkRead" type="button">Tandai dibaca</button></div><div id="notificationList"><div class="notification-empty">Memuat notifikasi…</div></div></div></div><div class="profile-wrap"><button class="profile-trigger" id="profileTrigger" type="button" aria-label="Profil"><span class="profile-trigger-avatar avatar" data-profile-avatar>J</span><span class="profile-trigger-name" id="profileTriggerName">You</span><span class="profile-chevron">⌄</span></button><div class="profile-menu glass" id="profileMenu"><div class="profile-menu-head"><div class="profile-menu-avatar avatar" data-profile-avatar>J</div><div><strong id="profileMenuName">You</strong><small id="profileMenuEmail">—</small></div></div><div class="profile-fields compact"><label>Nama<input id="profileName" type="text" maxlength="40" placeholder="Nama kamu"></label><label>Foto profil<input id="profilePhoto" type="file" accept="image/*"></label></div><div class="profile-actions"><button class="btn primary" id="saveProfile" type="button">Simpan profil</button><button class="btn" id="logoutAccount" type="button">Logout</button></div></div></div></div>
   </header>
   <main class="page-shell couple-page">
-    <section class="page-title"><div><span class="label">COUPLE LINK</span><h1>Hubungkan pasangan</h1><p>Buat kode pairing atau masukkan kode pasangan. Sharing hanya aktif setelah kedua akun terhubung.</p></div></section>
-    <section class="pair-card glass" id="pairCard">
-      <div class="pair-copy"><span class="label">PRIVATE CONNECTION</span><h2>Pair your accounts</h2><p>Kode hanya digunakan untuk menghubungkan dua akun yang saling memberikan persetujuan.</p></div>
-      <div class="pair-actions"><button class="btn primary" id="createPair">Buat kode</button><div class="join"><input id="pairCode" maxlength="8" placeholder="KODE" inputmode="text" autocomplete="off"><button class="btn" id="joinPair">Hubungkan</button></div><div class="pair-code" id="generatedCode"></div><div class="pair-timer" id="pairTimer" hidden>05:00</div></div>
-    </section>
+    <section class="page-title"><div><span class="label">YOUR SPACE</span><h1>Together, closer.</h1><p>Semua hal penting tentang kalian ada di satu tempat.</p></div></section>
+
     <section class="glass couple-status">
-      <span class="label">CONNECTION STATUS</span>
       <div class="connection-row"><div class="avatar" id="meAvatar" data-profile-avatar>J</div><div><strong id="meName">You</strong><small id="meStatus">Offline</small></div><span class="dot" id="meDot"></span></div>
       <div class="connection-row"><div class="avatar partner" id="partnerAvatar" data-partner-avatar>?</div><div><strong id="partnerName">Partner</strong><small id="partnerStatus">Belum terhubung</small></div><span class="dot" id="partnerDot"></span></div>
     </section>
+
     <section class="activity-grid couple-activity">
-      <article class="glass activity"><span class="label">ACTIVITY</span><h3>Phone presence</h3><div class="big-number" id="activeDuration">0m</div><p>Durasi aktif yang terdeteksi oleh dashboard ini hari ini.</p></article>
+      <article class="glass activity"><span class="label">PHONE PRESENCE</span><h3>Active today</h3><div class="big-number" id="activeDuration">0m</div><p>Waktu aplikasi mendeteksi kamu aktif hari ini.</p></article>
+      <article class="glass activity"><span class="label">CONNECTION</span><h3>Partner status</h3><div class="big-number" id="coupleConnectionLabel">Not paired</div><p id="partnerBattery" style="margin-top:4px">Battery unavailable</p><p>Lokasi dan presence hanya berjalan setelah kedua akun terhubung.</p></article>
+    </section>
+
+    <section class="glass pair-card" id="pairCard">
+      <div class="pair-copy"><span class="label">COUPLE LINK</span><h2>Connect your accounts</h2><p>Buat kode 5 menit atau masukkan kode pasangan.</p></div>
+      <div class="pair-actions"><button class="btn primary" id="createPair">Buat kode</button><div class="join"><input id="pairCode" maxlength="6" placeholder="KODE" inputmode="text" autocomplete="off"><button class="btn" id="joinPair">Hubungkan</button></div><div class="pair-code" id="generatedCode"></div><div class="pair-timer" id="pairTimer" hidden>05:00</div></div>
+    </section>
+
+    <section class="couple-extra-grid">
+      <article class="glass feature-card">
+        <span class="label">LOVE SIGNAL</span><h3>Send a little love</h3><p>Pasangan akan menerima notifikasi saat sinyal dikirim.</p>
+        <div class="signal-grid"><button class="signal" data-signal="Miss You">💗 Miss You</button><button class="signal" data-signal="Love You">❤️ Love You</button><button class="signal" data-signal="Hug">🫂 Hug</button></div>
+      </article>
+      <article class="glass feature-card">
+        <span class="label">OUR DAY</span><div class="special-day"><div class="special-icon">❤️</div><div><div class="days" id="togetherDays">— <small>days</small></div><p id="togetherLabel">Pilih tanggal jadian.</p></div></div>
+        <button class="btn small" id="setTogetherDate" type="button" style="margin-top:10px">Set date</button>
+      </article>
+    </section>
+
+    <section class="glass feature-card" style="margin-top:12px">
+      <span class="label">COUPLE PET</span><h3>Meet your little one 🐾</h3><p>Jaga mood dan energi pet kalian bersama. Data pet versi ini tersimpan di perangkat.</p>
+      <div class="special-day" style="margin-top:10px"><div class="special-icon" id="petEmoji">🐰</div><div><strong id="petName">Novi</strong><small style="display:block;color:var(--muted)" id="petStats">Happy · Energy 80%</small></div></div>
+      <div class="signal-grid"><button class="signal" id="petFeed">🍓 Feed</button><button class="signal" id="petPlay">🎾 Play</button><button class="signal" id="petRest">💤 Rest</button></div>
     </section>
   </main>
   <nav class="bottom-nav glass" aria-label="Main navigation">
-<a class="nav-link" data-page="home" href="./index.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg><span>Home</span></a>
-<a class="nav-link" data-page="location" href="./location.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span>Location</span></a>
-<a class="nav-link" data-page="couple" href="./couple.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 8.7c0 5.5-8.8 10.2-8.8 10.2S3.2 14.2 3.2 8.7A4.7 4.7 0 0 1 12 6.4a4.7 4.7 0 0 1 8.8 2.3Z"/></svg><span>Couple</span></a>
-<a class="nav-link" data-page="settings" href="./settings.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="8"/></svg><span>Settings</span></a>
+<a class="nav-link" data-page="home" href="./index.html"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg><span>Home</span></a>
+<a class="nav-link" data-page="location" href="./location.html"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span>Location</span></a>
+<a class="nav-link" data-page="couple" href="./couple.html"><svg viewBox="0 0 24 24"><path d="M20.8 8.7c0 5.5-8.8 10.2-8.8 10.2S3.2 14.2 3.2 8.7A4.7 4.7 0 0 1 12 6.4a4.7 4.7 0 0 1 8.8 2.3Z"/></svg><span>Couple</span></a>
+<a class="nav-link" data-page="connect" href="./connect.html"><svg viewBox="0 0 24 24"><path d="M7 12h10"/><path d="M12 7v10"/><circle cx="12" cy="12" r="9"/></svg><span>Connect</span></a>
+<a class="nav-link" data-page="settings" href="./settings.html"><svg viewBox="0 0 24 24"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="8"/></svg><span>Settings</span></a>
 </nav>
   <div class="toast" id="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

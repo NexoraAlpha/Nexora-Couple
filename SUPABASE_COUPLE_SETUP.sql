@@ -132,51 +132,42 @@ declare
   v_id uuid;
   v_code text;
 begin
-  if auth.uid() is null then
-    raise exception 'Not authenticated';
-  end if;
-
+  if auth.uid() is null then raise exception 'Not authenticated'; end if;
   v_code := upper(trim(p_code));
+  if v_code !~ '^[A-Z0-9]{6}$' then raise exception 'Invalid pairing code'; end if;
 
-  if v_code !~ '^[A-Z0-9]{6}$' then
-    raise exception 'Invalid pairing code';
-  end if;
-
-  -- Buang pairing pending milik user sendiri yang sudah expired.
-  delete from public.couples
-  where (user_a = auth.uid() or user_b = auth.uid())
-    and user_b is null
-    and pair_code_created_at < now() - interval '5 minutes';
-
-  -- Hanya pairing aktif / kode pending yang belum expired yang memblokir user.
+  -- A real paired connection always wins.
   if exists (
-    select 1
-    from public.couples c
+    select 1 from public.couples c
     where (c.user_a = auth.uid() or c.user_b = auth.uid())
-      and (
-        c.user_b is not null
-        or c.pair_code_created_at >= now() - interval '5 minutes'
-      )
+      and c.user_a is not null and c.user_b is not null
   ) then
     raise exception 'You are already paired';
   end if;
 
-  insert into public.couples (
-    pair_code,
-    user_a,
-    pair_code_created_at,
-    disconnect_status
-  )
-  values (
-    v_code,
-    auth.uid(),
-    now(),
-    'none'
-  )
+  -- Reuse the user's pending row instead of creating orphan rows.
+  select id into v_id
+  from public.couples
+  where user_a = auth.uid()
+    and user_b is null
+  order by created_at desc
+  limit 1;
+
+  if v_id is not null then
+    update public.couples
+    set pair_code = v_code,
+        pair_code_created_at = now(),
+        created_at = now(),
+        disconnect_status = 'none'
+    where id = v_id;
+    return v_id;
+  end if;
+
+  insert into public.couples(pair_code,user_a,pair_code_created_at,disconnect_status)
+  values(v_code,auth.uid(),now(),'none')
   returning id into v_id;
 
   return v_id;
-
 exception
   when unique_violation then
     raise exception 'Pairing code already exists. Try again.';
@@ -201,75 +192,39 @@ declare
   v_created timestamptz;
   v_code text;
 begin
-  if auth.uid() is null then
-    raise exception 'Not authenticated';
-  end if;
-
+  if auth.uid() is null then raise exception 'Not authenticated'; end if;
   v_code := upper(trim(p_code));
+  if v_code !~ '^[A-Z0-9]{6}$' then raise exception 'Invalid pairing code'; end if;
 
-  if v_code !~ '^[A-Z0-9]{6}$' then
-    raise exception 'Invalid pairing code';
-  end if;
-
-  -- FIX UTAMA:
-  -- akun yang punya kode pending lama/expired tidak boleh dianggap already paired.
-  delete from public.couples
-  where (user_a = auth.uid() or user_b = auth.uid())
-    and user_b is null
-    and pair_code_created_at < now() - interval '5 minutes';
-
-  select
-    id,
-    user_a,
-    user_b,
-    pair_code_created_at
-  into
-    v_id,
-    v_a,
-    v_b,
-    v_created
+  select id,user_a,user_b,pair_code_created_at
+  into v_id,v_a,v_b,v_created
   from public.couples
   where pair_code = v_code
   limit 1;
 
-  if v_id is null then
-    raise exception 'Pairing code not found';
-  end if;
-
+  if v_id is null then raise exception 'Pairing code not found'; end if;
   if v_created is null or v_created < now() - interval '5 minutes' then
     raise exception 'Pairing code has expired. Please create a new code.';
   end if;
-
-  if v_a = auth.uid() then
-    return v_id;
-  end if;
-
+  if v_a = auth.uid() then return v_id; end if;
   if v_b is not null and v_b <> auth.uid() then
     raise exception 'Pairing code already used';
   end if;
 
-  -- Jangan menganggap pending code milik user sebagai pasangan aktif.
+  -- Only an actually connected pair blocks joining.
   if exists (
-    select 1
-    from public.couples c
+    select 1 from public.couples c
     where (c.user_a = auth.uid() or c.user_b = auth.uid())
-      and (
-        c.user_b is not null
-        or c.pair_code_created_at >= now() - interval '5 minutes'
-      )
+      and c.user_a is not null and c.user_b is not null
   ) then
     raise exception 'You are already paired';
   end if;
 
   update public.couples
   set user_b = auth.uid()
-  where id = v_id
-    and user_b is null;
+  where id = v_id and user_b is null;
 
-  if not found then
-    raise exception 'Pairing code already used';
-  end if;
-
+  if not found then raise exception 'Pairing code already used'; end if;
   return v_id;
 end;
 $$;
@@ -588,3 +543,141 @@ grant execute on function public.approve_leave_pair() to authenticated;
 -- 3. Kode pending yang expired otomatis tidak lagi memblokir akun.
 -- 4. Partner dianggap offline jika heartbeat terakhir >45 detik.
 -- 5. Putus pasangan membutuhkan persetujuan kedua pihak.
+
+
+-- =========================================================
+-- NOVERA MOBILE COUPLE OVERHAUL — BATTERY + LOVE SIGNALS
+-- =========================================================
+
+alter table public.couple_presence
+  add column if not exists battery_percent integer,
+  add column if not exists charging boolean;
+
+-- Partner snapshot with battery information.
+drop function if exists public.partner_snapshot();
+create function public.partner_snapshot()
+returns table(
+  user_id uuid,
+  display_name text,
+  avatar_data text,
+  is_online boolean,
+  last_seen timestamptz,
+  latitude double precision,
+  longitude double precision,
+  speed_kmh double precision,
+  location_updated_at timestamptz,
+  battery_percent integer,
+  charging boolean
+)
+language sql
+security definer
+set search_path = public
+as $$
+  with p as (
+    select case
+      when c.user_a = auth.uid() then c.user_b
+      else c.user_a
+    end as partner_id
+    from public.couples c
+    where (c.user_a = auth.uid() or c.user_b = auth.uid())
+      and c.user_a is not null
+      and c.user_b is not null
+    order by c.created_at desc
+    limit 1
+  )
+  select
+    p.partner_id,
+    coalesce(pro.display_name, 'Partner')::text,
+    coalesce(pro.avatar_data, '')::text,
+    coalesce(
+      cp.is_online
+      and cp.last_seen >= now() - interval '45 seconds',
+      false
+    ),
+    cp.last_seen,
+    cl.latitude,
+    cl.longitude,
+    coalesce(cl.speed_kmh, 0),
+    cl.updated_at,
+    cp.battery_percent,
+    cp.charging
+  from p
+  left join public.couple_presence cp on cp.user_id = p.partner_id
+  left join public.couple_profiles pro on pro.user_id = p.partner_id
+  left join public.couple_locations cl on cl.user_id = p.partner_id;
+$$;
+
+-- Send a small couple signal to the connected partner.
+drop function if exists public.send_couple_signal(text);
+create function public.send_couple_signal(p_signal text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  partner_id uuid;
+  clean_signal text;
+  signal_title text;
+  signal_body text;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  clean_signal := trim(p_signal);
+
+  if clean_signal not in (
+    'Miss You',
+    'Love You',
+    'Hug',
+    'Kiss',
+    'Thinking of You',
+    'Good Night'
+  ) then
+    raise exception 'Invalid signal';
+  end if;
+
+  select case
+    when user_a = auth.uid() then user_b
+    else user_a
+  end
+  into partner_id
+  from public.couples
+  where (user_a = auth.uid() or user_b = auth.uid())
+    and user_a is not null
+    and user_b is not null
+  order by created_at desc
+  limit 1;
+
+  if partner_id is null then
+    raise exception 'Belum ada pasangan yang terhubung';
+  end if;
+
+  signal_title := '💗 ' || clean_signal;
+  signal_body := case clean_signal
+    when 'Miss You' then 'Pasanganmu mengirim sinyal: kangen kamu.'
+    when 'Love You' then 'Pasanganmu mengirim sinyal: love you.'
+    when 'Hug' then 'Pasanganmu mengirim pelukan untukmu.'
+    when 'Kiss' then 'Pasanganmu mengirim kiss untukmu.'
+    when 'Thinking of You' then 'Pasanganmu sedang memikirkanmu.'
+    when 'Good Night' then 'Pasanganmu mengucapkan good night.'
+  end;
+
+  insert into public.couple_notifications(
+    user_id, type, title, body, data
+  )
+  values (
+    partner_id,
+    'couple_signal',
+    signal_title,
+    signal_body,
+    jsonb_build_object('signal', clean_signal, 'from', auth.uid())
+  );
+
+  return true;
+end;
+$$;
+
+grant execute on function public.send_couple_signal(text) to authenticated;
+grant execute on function public.partner_snapshot() to authenticated;
