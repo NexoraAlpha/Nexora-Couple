@@ -120,23 +120,20 @@ async function ensureAuth() {
 
   try {
     const { data: sessionData } = await sb.auth.getSession();
-    if (sessionData?.session?.user) {
-      myUser = sessionData.session.user;
-      return true;
-    }
+    const user = sessionData?.session?.user;
 
-    const { data, error } = await sb.auth.signInAnonymously();
-    if (error || !data?.user) {
-      console.warn('Anonymous auth failed:', error?.message);
-      toast('Anonymous Sign-Ins belum aktif di Supabase.');
+    // NOVERA requires a permanent email account before any couple feature
+    // can be used. Anonymous sessions are intentionally not accepted here.
+    if (!user || user.is_anonymous) {
+      location.href = './auth.html';
       return false;
     }
 
-    myUser = data.user;
+    myUser = user;
     return true;
   } catch (error) {
     console.warn('Auth failed:', error);
-    toast('Koneksi Supabase gagal.');
+    location.href = './auth.html';
     return false;
   }
 }
@@ -237,26 +234,48 @@ async function logoutAccount() {
   location.href = './auth.html';
 }
 
-async function leavePair() {
+async function requestLeavePair() {
   if (!sb || !myUser) return;
   if (!isPaired()) { toast('Belum ada pasangan yang terhubung.'); return; }
-  if (!window.confirm('Putuskan pasangan? Koneksi lokasi dan data pasangan akan dihentikan.')) return;
 
-  const { error } = await sb.rpc('leave_pair');
-  if (error) { toast(error.message || 'Pasangan gagal diputuskan.'); return; }
+  const { data, error } = await sb.rpc('request_leave_pair');
+  if (error) { toast(error.message || 'Permintaan belum dapat dikirim.'); return; }
 
-  stopLocationSharing(false);
-  myPair = null;
+  if (data?.already_pending) {
+    toast('Permintaan putus sudah menunggu persetujuan pasangan.');
+  } else {
+    toast('Permintaan putus dikirim. Menunggu persetujuan pasangan.');
+  }
+  await loadPair();
+  await loadNotifications();
+}
+
+async function cancelLeaveRequest() {
+  if (!sb || !myUser) return;
+  const { error } = await sb.rpc('cancel_leave_pair');
+  if (error) { toast(error.message || 'Permintaan gagal dibatalkan.'); return; }
+  toast('Permintaan putus dibatalkan.');
+  await loadPair();
+}
+
+async function respondLeaveRequest(approve) {
+  if (!sb || !myUser) return;
+  const { data, error } = await sb.rpc(approve ? 'approve_leave_pair' : 'reject_leave_pair');
+  if (error) { toast(error.message || 'Respons gagal diproses.'); return; }
+  toast(approve ? 'Pasangan berhasil diputus setelah persetujuan kedua pihak.' : 'Permintaan putus ditolak.');
   await loadPair();
   await loadPartner();
-  toast('Pasangan berhasil diputuskan.');
+  await loadNotifications();
 }
 
 function setupProfileUI() {
   if ($('profileName')) $('profileName').value = myProfile?.display_name || '';
   if ($('saveProfile')) $('saveProfile').onclick = saveProfile;
   if ($('logoutAccount')) $('logoutAccount').onclick = logoutAccount;
-  if ($('leavePair')) $('leavePair').onclick = leavePair;
+  if ($('leavePair')) $('leavePair').onclick = requestLeavePair;
+  if ($('cancelLeavePair')) $('cancelLeavePair').onclick = cancelLeaveRequest;
+  if ($('approveLeavePair')) $('approveLeavePair').onclick = () => respondLeaveRequest(true);
+  if ($('rejectLeavePair')) $('rejectLeavePair').onclick = () => respondLeaveRequest(false);
 }
 
 function setupAuthPage() {
@@ -533,10 +552,24 @@ async function loadPair() {
 
   myPair = data?.[0] || null;
   const paired = isPaired();
+  const pending = myPair?.disconnect_status === 'pending';
+  const requestedByMe = pending && myPair?.disconnect_requested_by === myUser?.id;
 
-  setText('pairStatus', paired ? 'Paired' : 'Not paired');
+  setText('pairStatus', paired ? (pending ? 'Disconnect pending' : 'Paired') : 'Not paired');
   setText('partnerStatus', paired ? 'Offline' : 'Belum terhubung');
-  setText('settingsPairStatus', paired ? 'Paired' : 'Not paired');
+  setText('settingsPairStatus', paired ? (pending ? 'Disconnect pending' : 'Paired') : 'Not paired');
+  setText('disconnectStatus', !pending ? '' : (requestedByMe ? 'Menunggu persetujuan pasangan.' : 'Pasangan meminta mengakhiri pairing.'));
+
+  document.querySelectorAll('[data-disconnect-request]').forEach(el => {
+    el.hidden = !pending;
+  });
+  const leaveBtn = $('leavePair');
+  const cancelBtn = $('cancelLeavePair');
+  if (leaveBtn) {
+    leaveBtn.hidden = pending;
+    leaveBtn.textContent = 'Ajukan putus';
+  }
+  if (cancelBtn) cancelBtn.hidden = !requestedByMe;
 
   if (myPair?.pair_code && !paired) {
     setText('generatedCode', myPair.pair_code);
@@ -716,6 +749,66 @@ function startTimers() {
   }, 5000);
 }
 
+async function loadNotifications() {
+  if (!sb || !myUser) return;
+  const { data, error } = await sb
+    .from('couple_notifications')
+    .select('id,type,title,body,data,read_at,created_at')
+    .eq('user_id', myUser.id)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) { console.warn('Notifications load failed:', error.message); return; }
+
+  const list = $('notificationList');
+  const badge = $('notificationBadge');
+  const unread = (data || []).filter(n => !n.read_at).length;
+  if (badge) { badge.textContent = unread > 99 ? '99+' : String(unread); badge.hidden = unread === 0; }
+  if (!list) return;
+
+  if (!data?.length) {
+    list.innerHTML = '<div class="notification-empty">Belum ada notifikasi.</div>';
+    return;
+  }
+
+  list.innerHTML = data.map(n => {
+    const action = n.type === 'disconnect_request' ? `
+      <div class="notification-actions">
+        <button class="btn small notification-approve" data-notification-id="${n.id}">Setujui</button>
+        <button class="btn small notification-reject" data-notification-id="${n.id}">Tolak</button>
+      </div>` : '';
+    return `<article class="notification-item ${n.read_at ? '' : 'unread'}">
+      <div><strong>${escapeHtml(n.title || 'Notifikasi')}</strong><p>${escapeHtml(n.body || '')}</p><small>${timeAgo(n.created_at)}</small></div>${action}
+    </article>`;
+  }).join('');
+
+  list.querySelectorAll('.notification-approve').forEach(btn => btn.onclick = async () => { await respondLeaveRequest(true); });
+  list.querySelectorAll('.notification-reject').forEach(btn => btn.onclick = async () => { await respondLeaveRequest(false); });
+}
+
+async function markNotificationsRead() {
+  if (!sb || !myUser) return;
+  await sb.from('couple_notifications').update({ read_at: new Date().toISOString() }).eq('user_id', myUser.id).is('read_at', null);
+  await loadNotifications();
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;',"\"":'&quot;'}[c]));
+}
+
+function setupNotifications() {
+  const button = $('notificationButton');
+  const panel = $('notificationPanel');
+  button?.addEventListener('click', async e => {
+    e.stopPropagation();
+    panel?.classList.toggle('open');
+    if (panel?.classList.contains('open')) await markNotificationsRead();
+  });
+  document.addEventListener('click', e => {
+    if (panel && !panel.contains(e.target) && !button?.contains(e.target)) panel.classList.remove('open');
+  });
+  $('notificationMarkRead')?.addEventListener('click', markNotificationsRead);
+}
+
 function setupNav() {
   const path = pageName();
 
@@ -811,18 +904,20 @@ async function start() {
   setupNav();
   setupButtons();
   setupLifecycle();
+  setupNotifications();
   restoreSharingState();
+
+  if (!(await ensureAuth())) return;
 
   if (page === 'location' && $('map')) {
     ensureLeaflet();
   }
 
-  if (!(await ensureAuth())) return;
-
   await loadProfile();
   setupProfileUI();
   await loadPair();
   await loadPartner();
+  await loadNotifications();
   startTimers();
 
   if (sharing && isPaired()) startLocationSharing(false);

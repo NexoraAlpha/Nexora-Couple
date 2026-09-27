@@ -14,7 +14,7 @@
   <div class="bg-grid"></div><div class="orb orb-a"></div><div class="orb orb-b"></div>
   <header class="topbar glass">
     <a class="brand" href="./index.html" aria-label="Nexora Couple"><img src="./nexora-icon.svg" alt="Nexora"><div><b>NEXORA</b><span>COUPLE</span></div></a>
-    <div class="pair-pill" id="pairStatus">Not paired</div>
+    <div class="top-actions"><div class="notification-wrap"><button class="notification-button" id="notificationButton" type="button" aria-label="Notifikasi">🔔<span class="notification-badge" id="notificationBadge" hidden>0</span></button><div class="notification-panel glass" id="notificationPanel"><div class="notification-head"><strong>Notifikasi</strong><button id="notificationMarkRead" type="button">Tandai dibaca</button></div><div id="notificationList"><div class="notification-empty">Memuat notifikasi…</div></div></div></div><div class="pair-pill" id="pairStatus">Not paired</div></div>
   </header>
   <main class="page-shell settings-page">
     <section class="page-title"><div><span class="label">SETTINGS</span><h1>Privacy & settings</h1><p>Atur apa yang ingin dibagikan dari perangkat ini.</p></div></section>
@@ -39,7 +39,7 @@
         <p class="account-hint" id="guestAccountHint">Akun tamu tersimpan di perangkat ini.</p>
       </article>
 
-      <article class="glass setting-card danger-card"><div><span class="label">COUPLE</span><h3>Putuskan pasangan</h3><p>Hentikan hubungan pairing dari akun ini. Lokasi tidak lagi dibagikan ke pasangan.</p></div><button class="btn danger" id="leavePair" type="button">Putuskan</button></article>
+      <article class="glass setting-card danger-card"><div><span class="label">COUPLE</span><h3>Putuskan pasangan</h3><p>Permintaan harus disetujui kedua pihak. Menekan tombol ini tidak langsung menghapus pairing.</p><p class="disconnect-status" id="disconnectStatus"></p></div><div class="disconnect-actions"><button class="btn danger" id="leavePair" type="button">Ajukan putus</button><button class="btn" id="cancelLeavePair" type="button" hidden>Batalkan permintaan</button></div></article>
 
       <article class="glass privacy setting-privacy"><span class="label">PRIVACY FIRST</span><h3>Data pasangan tetap di bawah kontrol masing-masing.</h3><p>Lokasi hanya dibagikan setelah permission diberikan. Jangan gunakan fitur tracking secara diam-diam atau untuk mengawasi pasangan tanpa persetujuan.</p></article>
     </section>
