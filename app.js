@@ -246,8 +246,9 @@ async function logoutAccount() {
 
 async function requestLeavePair() {
   if (!sb || !myUser) return;
-  if (!isPaired()) { toast('Belum ada pasangan yang terhubung.'); return; }
 
+  // Let Supabase determine the actual pairing state. The cached myPair
+  // object can be stale between page load and a button press.
   const { data, error } = await sb.rpc('request_leave_pair');
   if (error) { toast(error.message || 'Permintaan belum dapat dikirim.'); return; }
 
@@ -1053,33 +1054,14 @@ function setupButtons() {
     });
   }
 
-  // Couple disconnect controls (settings.html)
-  // These listeners were missing, so the "Putuskan pasangan" button
-  // rendered correctly but never called the Supabase RPC.
+  // Disconnect controls: only wire the existing buttons to the existing
+  // Supabase RPC functions. No pairing/display logic is changed here.
   if ($('leavePair')) {
-    $('leavePair').onclick = async () => {
-      const btn = $('leavePair');
-      if (btn.disabled) return;
-      btn.disabled = true;
-      try {
-        await requestLeavePair();
-      } finally {
-        btn.disabled = false;
-      }
-    };
+    $('leavePair').onclick = requestLeavePair;
   }
 
   if ($('cancelLeavePair')) {
-    $('cancelLeavePair').onclick = async () => {
-      const btn = $('cancelLeavePair');
-      if (btn.disabled) return;
-      btn.disabled = true;
-      try {
-        await cancelLeaveRequest();
-      } finally {
-        btn.disabled = false;
-      }
-    };
+    $('cancelLeavePair').onclick = cancelLeaveRequest;
   }
 
   if ($('refreshBtn')) {
